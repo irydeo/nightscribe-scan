@@ -3044,31 +3044,12 @@ def _write(path, text):
 
 
 def _schema():
-    """The CONFIG_SCHEMA fields with their current values and defaults."""
-    filevals = {}
-    try:
-        for (_sec, key), raw in _parse_ini(_read(CFG, "")).items():
-            filevals[key.upper()] = raw
-    except:
-        pass
+    """The CONFIG_SCHEMA fields with their current (live) values."""
     out = []
     for section, entries in CONFIG_SCHEMA:
         fields = []
         for name, help_text in entries:
             val = globals().get(name)
-            raw = filevals.get(name.upper())
-            if raw is not None:
-                try:
-                    if isinstance(val, bool):
-                        val = raw.strip().lower() in ("1", "true", "yes", "on")
-                    elif isinstance(val, int) and not isinstance(val, bool):
-                        val = int(float(raw))
-                    elif isinstance(val, float):
-                        val = float(raw)
-                    else:
-                        val = raw
-                except:
-                    pass
             if isinstance(val, bool):
                 kind = "bool"
             elif isinstance(val, int):
@@ -3099,6 +3080,24 @@ def _write_cfg(values):
     _write(CFG, "\n".join(lines))
 
 
+def _apply_values(values):
+    """Apply {CONSTANT_NAME: value} to the module globals, coercing the type.
+
+    Used by Start (so the capture runs with exactly what the panel shows) and
+    by Save (so the file and the live values stay in agreement).
+    """
+    if not values:
+        return
+    for section, entries in CONFIG_SCHEMA:
+        for name, _help in entries:
+            if name in values and name in globals():
+                try:
+                    globals()[name] = _coerce(str(values[name]),
+                                              globals()[name])
+                except:
+                    pass
+
+
 def _load_profiles():
     try:
         return json.loads(_read(PROFILES, '{"version": 1, "profiles": {}}'))
@@ -3109,12 +3108,6 @@ def _load_profiles():
 def _run_capture_thread():
     """Run a capture session on the server thread (used by Start)."""
     try:
-        state["running"] = True
-        state["message"] = "running"
-        state["started"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-        _abort[0] = False
-        apply_config_file(verbose=False)
-        refresh_derived()
         run_capture()
         state["message"] = "done"
     except Exception as e:
@@ -3123,12 +3116,24 @@ def _run_capture_thread():
         state["running"] = False
 
 
-def _start():
+def _start(values=None):
+    """Apply the panel's values and run a capture session.
+
+    The values come straight from the form, so Start always uses what is on
+    screen; saving to disk is a separate, explicit action.
+    """
     if state["running"]:
-        return
+        return False
+    _apply_values(values)
+    refresh_derived()
+    _abort[0] = False
+    state["running"] = True
+    state["message"] = "running"
+    state["started"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     t = Thread(ThreadStart(lambda: _run_capture_thread()))
     t.IsBackground = True
     t.Start()
+    return True
 
 
 def _read_request(conn):
@@ -3188,6 +3193,7 @@ def _handle(conn):
         except:
             values = {}
         _write_cfg(values)
+        _apply_values(values)
         _respond(conn, 200, json.dumps({"ok": True}))
     elif path == "/api/profiles" and method == "GET":
         _respond(conn, 200, json.dumps(_load_profiles()))
@@ -3195,7 +3201,11 @@ def _handle(conn):
         _write(PROFILES, body.decode("utf-8") or "{}")
         _respond(conn, 200, json.dumps({"ok": True}))
     elif path == "/api/start" and method == "POST":
-        _start()
+        try:
+            values = json.loads(body.decode("utf-8") or "{}")
+        except:
+            values = {}
+        _start(values)
         _respond(conn, 200, json.dumps({"ok": True, "running": state["running"]}))
     elif path == "/api/stop" and method == "POST":
         _abort[0] = True

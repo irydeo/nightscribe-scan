@@ -982,7 +982,7 @@ byId("metaDlg").addEventListener("close", async () => {
 });
 
 // ── run ──────────────────────────────────────────────────────────────────────
-async function start(){ if (mode!=="server"){ setStatus("Start needs the server","warn"); return; } await apiSend("/api/start","POST",{}); refreshStatus(); }
+async function start(){ if (mode!=="server"){ setStatus("Start needs the server","warn"); return; } await apiSend("/api/start","POST",collect()); refreshStatus(); }
 async function stop(){ if (mode!=="server"){ setStatus("Stop needs the server","warn"); return; } await apiSend("/api/stop","POST",{}); refreshStatus(); }
 
 async function refreshStatus(){

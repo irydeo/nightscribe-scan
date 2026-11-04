@@ -104,6 +104,10 @@ The panel is a compact card (not full screen) with:
   `nightscribe-scan.cfg`.
 - **Status** and **connection** (server or file mode).
 
+**Start always uses the values currently shown in the panel**, so there is no
+need to save first; **Save config** only persists them to `nightscribe-scan.cfg`
+for the next session.
+
 The embedded schema is regenerated from the script with
 `python3 tools/build_ui.py`.
 

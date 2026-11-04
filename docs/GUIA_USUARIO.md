@@ -104,6 +104,10 @@ El panel es una tarjeta compacta (no ocupa toda la pantalla) con:
   escribe `nightscribe-scan.cfg`.
 - **Estado** y **conexión** (servidor o modo fichero).
 
+**Iniciar usa siempre los valores que se ven en el panel**, así que no hace
+falta guardar antes; **Save config** solo los persiste en
+`nightscribe-scan.cfg` para la próxima sesión.
+
 El esquema embebido se regenera desde el script con `python3 tools/build_ui.py`.
 
 ---
