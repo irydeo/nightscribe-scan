@@ -19,6 +19,7 @@ import pytest
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SCAN = os.path.join(ROOT, "nightscribe-scan.py")
+FOCUS = os.path.join(ROOT, "nightscribe-focus.py")
 FIXTURES = os.path.join(HERE, "fixtures")
 SESSION_CFG = os.path.join(FIXTURES, "session.cfg")
 
@@ -93,3 +94,18 @@ def load_scan(config_path=None, camera=None, mount=None):
 def scan():
     """The script namespace loaded with the real session configuration."""
     return load_scan(SESSION_CFG)
+
+
+def load_focus(camera=None):
+    """Execute nightscribe-focus.py with SharpCap stubbed and return its namespace."""
+    import sharpcap_stub
+
+    _install_modules()
+    sharpcap = sharpcap_stub.SharpCap(
+        camera=camera if camera is not None else sharpcap_stub.Camera())
+    src = open(FOCUS).read()
+    # Cut just before the entry point so the server is not started.
+    cut = src.rfind("\n", 0, src.index("Focus entry point"))
+    ns = {"SharpCap": sharpcap, "__name__": "nightscribe_focus", "__file__": FOCUS}
+    exec(compile(src[:cut], FOCUS, "exec"), ns)
+    return ns

@@ -556,12 +556,38 @@ Tres detalles mantienen el SER cerca del disco:
 
 ---
 
-## 10. Referencias
+## 10. Enfoque (`nightscribe-focus.py`)
+
+`nightscribe-focus.py` es una utilidad aparte: no toca el script de captura.
+Cárgala en la consola de scripting de SharpCap y levanta un panel en
+<http://127.0.0.1:8766/> con los indicadores de enfoque en vivo y un
+máximo/mínimo retenido (con botones de reset y pausa).
+
+Siguiendo la rutina del SHG-700 de MLAstro, en este orden:
+
+1. **Espectrógrafo** (tornillo de la cámara): maximiza el **contraste** y el
+   **gradiente** de las líneas de absorción. H-α es la línea principal; el doble
+   de hierro que tiene al lado es buena referencia de nitidez.
+2. **Colimador** (tornillo del colimador): maximiza la **nitidez** del borde de
+   la rendija y **minimiza su planitud** (un borde recto tiene planitud 0). Los
+   enfoques de cámara y colimador interactúan, así que itera 1-2.
+3. **Telescopio** (enfocador): maximiza el **contraste**, el **gradiente** y el
+   número de **estructuras** del detalle de superficie.
+
+Los dos indicadores de contraste se calculan sobre ambos ejes, así que el panel
+funciona con cualquier orientación de cámara. Se calculan sobre el frame crudo:
+fija antes la exposición y usa el stretch de histograma de SharpCap para juzgar
+a ojo. El panel también muestra la orientación del borde que ha detectado.
+
+---
+
+## 11. Referencias
 
 - `nightscribe-scan.py` — script de captura (bloque de configuración,
   `scan_once()`, `calibrate_scan_rate()`, `measure_slit_scale()`).
 - `nightscribe-scan.cfg` (listo) / `docs/nightscribe-scan.cfg.example` / `docs/nightscribe-scan.cfg.reference` — configuración.
 - `nightscribe-ui.html` — panel de control servido por el script (perfiles, config, iniciar/parar).
+- `nightscribe-focus.py` — ayuda al enfoque (espectrógrafo, colimador, telescopio).
 - `tools/build_ui.py` — regenera el esquema embebido del panel.
 - `nightscribe-profiles.json` — perfiles guardados por el panel.
 - `tools/align_stack_recon.py`, `tools/mosaic_from_recon.py` — apilado y mosaico.

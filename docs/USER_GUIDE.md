@@ -549,12 +549,38 @@ Three details keep the recorded SER close to the disk:
 
 ---
 
-## 10. References
+## 10. Focusing (`nightscribe-focus.py`)
+
+`nightscribe-focus.py` is a separate utility: it does not touch the capture
+script. Load it in the SharpCap scripting console and it serves a small panel on
+<http://127.0.0.1:8766/> with the live focus indicators and a max/min hold
+(reset and pause buttons included).
+
+Following the MLAstro SHG-700 focus routine, work in this order:
+
+1. **Spectrograph** (camera micrometer): maximise the **contrast** and
+   **gradient** of the absorption lines. H-alpha is the main line; the iron
+   double line next to it is a good sharpness cue.
+2. **Collimator** (collimator micrometer): maximise the **sharpness** of the
+   slit edge and **minimise its flatness** (a straight edge has flatness 0).
+   The camera and collimator focuses interact, so iterate 1-2.
+3. **Telescope** (focuser): maximise the **contrast**, **gradient** and number
+   of **structures** in the surface detail.
+
+The two contrast indicators are computed along both axes, so the panel works
+whatever the camera orientation. The indicators are computed on the raw frame:
+fix the exposure first, and use SharpCap's own histogram stretch to judge by
+eye. The panel also shows the edge orientation it found.
+
+---
+
+## 11. References
 
 - `nightscribe-scan.py` — capture script (config block, `scan_once()`,
   `calibrate_scan_rate()`, `measure_slit_scale()`).
 - `nightscribe-scan.cfg` (ready) / `docs/nightscribe-scan.cfg.example` / `docs/nightscribe-scan.cfg.reference` — configuration.
 - `nightscribe-ui.html` — control panel served by the script (profiles, config, start/stop).
+- `nightscribe-focus.py` — focus aid (spectrograph, collimator, telescope).
 - `tools/build_ui.py` — regenerates the panel's embedded schema.
 - `nightscribe-profiles.json` — profiles saved by the panel.
 - `tools/align_stack_recon.py`, `tools/mosaic_from_recon.py` — stacking and mosaic.

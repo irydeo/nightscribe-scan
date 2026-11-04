@@ -33,6 +33,8 @@ here.
   (`scan_log.csv`, `scan_stats.jsonl`, `session_meta.json`).
 - **Built-in HTML control panel** for profiles, configuration and
   start/stop (`nightscribe-ui.html`, served by the script).
+- **Optional focus aid** (`nightscribe-focus.py`): a separate utility with a
+  live panel for the spectrograph, collimator and telescope focus.
 - **Two post-processing tools**: `tools/align_stack_recon.py` (stack one row)
   and `tools/mosaic_from_recon.py` (stitch the rows).
 
@@ -65,6 +67,7 @@ here.
 - Guía de usuario (español): [docs/GUIA_USUARIO.md](docs/GUIA_USUARIO.md)
 - Configuration template: [docs/nightscribe-scan.cfg.example](docs/nightscribe-scan.cfg.example)
 - Full configuration reference: [docs/nightscribe-scan.cfg.reference](docs/nightscribe-scan.cfg.reference)
+- Focus aid: `nightscribe-focus.py` (see the user guide)
 - Post-processing tools: [tools/](tools/)
 
 The user guide covers the quick start, every feature and, in its *Deep dive*
