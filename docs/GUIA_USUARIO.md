@@ -54,9 +54,9 @@ geometría, controles de integridad y registros de sesión.
 ### 2.1 Configuración externa y panel de control
 
 **Fichero de configuración.** Todo lo ajustable está en `nightscribe-scan.cfg`
-(INI, en la misma carpeta), editable a mano con cualquier editor de texto. Solo
-hay que fijar unos pocos valores; el resto tiene defecto. Parte del mínimo
-`nightscribe-scan.cfg.example`:
+(INI, en la misma carpeta), editable a mano con cualquier editor de texto. El
+proyecto incluye un `nightscribe-scan.cfg` **listo para usar**; solo hay que
+fijar unos pocos valores, el resto tiene defecto:
 
 ```ini
 [optics]
@@ -75,9 +75,10 @@ mosaic_scans_per_row = 5
 ```
 
 La lista completa de ajustes (con sus defectos) está en
-`nightscribe-scan.cfg.reference`. Las claves que falten usan el defecto; las
-líneas con `#` se ignoran. El banner dice de dónde se cargó. También puedes
-fijar la ruta con la variable de entorno `NIGHTSCRIBE_CONFIG`.
+`docs/nightscribe-scan.cfg.reference`, y `docs/nightscribe-scan.cfg.example` es
+una plantilla mínima por si quieres empezar de cero. Las claves que falten usan
+el defecto; las líneas con `#` se ignoran. El banner dice de dónde se cargó.
+También puedes fijar la ruta con la variable de entorno `NIGHTSCRIBE_CONFIG`.
 
 **Panel de control (HTML).** Funciona en **dos modos**:
 
@@ -532,7 +533,7 @@ causas y acciones.
 
 - `nightscribe-scan.py` — script de captura (bloque de configuración,
   `scan_once()`, `calibrate_scan_rate()`, `measure_slit_scale()`).
-- `nightscribe-scan.cfg.example` (mínimo) / `nightscribe-scan.cfg.reference` (completo) — configuración.
+- `nightscribe-scan.cfg` (listo) / `docs/nightscribe-scan.cfg.example` / `docs/nightscribe-scan.cfg.reference` — configuración.
 - `nightscribe-ui.py` / `nightscribe-ui.html` — panel de control (perfiles, config, iniciar/parar).
 - `tools/build_ui.py` — regenera el esquema embebido del panel.
 - `nightscribe-profiles.json` — perfiles guardados por el panel.

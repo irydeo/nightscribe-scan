@@ -1,0 +1,31 @@
+# NightScribe configuration template.
+#
+# The project already ships a ready-to-use "nightscribe-scan.cfg"; copy this
+# file over it only if you deleted or want to replace it.
+#
+# You normally only need to set the [optics] values below. Everything else has
+# a built-in default; the complete list is in "nightscribe-scan.cfg.reference"
+# and can be edited from the HTML control panel (nightscribe-ui.py).
+# See docs/USER_GUIDE.md §2.1.
+#
+# Keys are the constant names in lower case; lines starting with # or ; are
+# comments. Missing keys keep their default.
+
+[optics]
+# Effective focal length at the sensor (mm). THE value to get right: it sets
+# the scan rate. Measure it on a NATIVE recon, not on a resampled JSol'Ex
+# stack. Too large -> the recon is stretched in X; too small -> compressed.
+focal_length = 714
+# Camera pixel size (um).
+pixel_size = 2
+
+# ── Only for a full-disk mosaic ───────────────────────────────────────────────
+# Set enable_mosaic = true for a multi-row mosaic; false for a single strip.
+[scan]
+enable_mosaic = false
+
+[mosaic]
+# Physical slit length (mm).
+mosaic_slit_length_mm = 7
+# Full scans captured per row.
+mosaic_scans_per_row = 5

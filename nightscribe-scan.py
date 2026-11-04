@@ -488,8 +488,8 @@ def apply_config_file(verbose=True):
     if path is None:
         if verbose:
             print("Config: no {} found; using defaults.".format(CONFIG_FILE_NAME))
-            print("        Copy {} to {} to set your optics.".format(
-                CONFIG_FILE_NAME + ".example", CONFIG_FILE_NAME))
+            print("        A ready {} ships with the project; see docs/{}.example "
+                  "to restore it.".format(CONFIG_FILE_NAME, CONFIG_FILE_NAME))
         return None
     try:
         with open(path, "r") as fh:

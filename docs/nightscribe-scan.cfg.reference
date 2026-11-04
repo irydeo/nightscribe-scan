@@ -1,9 +1,9 @@
 # NightScribe configuration — FULL REFERENCE.
 #
 # This is the complete list of settings with their defaults. You do not need to
-# copy all of it: the minimal file to start from is
-# "nightscribe-scan.cfg.example". Put only the keys you want to change in
-# "nightscribe-scan.cfg"; missing keys keep their default.
+# copy all of it: a ready "nightscribe-scan.cfg" ships with the project and the
+# minimal template is "docs/nightscribe-scan.cfg.example". Put only the keys you
+# want to change in "nightscribe-scan.cfg"; missing keys keep their default.
 #
 # Lines starting with # or ; are comments. Keys are the constant names in lower
 # case; sections are only for organisation. The HTML UI (nightscribe-ui.py)

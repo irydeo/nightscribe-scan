@@ -1,8 +1,7 @@
 # ── Design notes (kept locally, not published) ────────────────────────────────
 design/
 
-# ── User configuration and profiles (keep the .example) ───────────────────────
-nightscribe-scan.cfg
+# ── User profiles (the .cfg is shipped ready to use) ──────────────────────────
 nightscribe-profiles.json
 
 # ── Python ────────────────────────────────────────────────────────────────────
