@@ -70,6 +70,20 @@ here.
 The user guide covers the quick start, every feature and, in its *Deep dive*
 section, the geometry and the reasons behind the design.
 
+## Development
+
+The test suite runs outside SharpCap by stubbing the SharpCap API (see
+`tests/conftest.py` and `tests/sharpcap_stub.py`):
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest
+```
+
+The fixtures in `tests/fixtures/` are real session files used as regression
+data — for example the `scan_log.csv` that exposed the scan-rate calibration
+bug (`actual_xy` ≈ 4.1 instead of ≈ 1).
+
 ## Credits
 
 NightScribe-Scan is based on the **SHGScan** project by Patrick Hsieh

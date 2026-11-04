@@ -7,6 +7,7 @@ nightscribe-profiles.json
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
 # ── Capture and post-processing outputs ───────────────────────────────────────
 *.ser
@@ -21,3 +22,6 @@ mosaic/
 scan_log.csv
 scan_stats.jsonl
 session_meta.json
+
+# ── Test fixtures (keep even if they match a capture-output pattern) ──────────
+!tests/fixtures/scan_log.csv

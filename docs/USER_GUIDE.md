@@ -430,6 +430,13 @@ the crossing time against the (ephemeris) diameter, and scales
 the dependence on `FOCAL_LENGTH` and the reported FPS being exact. The result is
 logged per scan as `actual_xy` (≈1.000 when correct).
 
+The calibration measures the sky rate while slewing at `MOSAIC_CHORD_SPEED`
+(16x) and scales the science multiplier by the **rate per unit**
+(`measured / MOSAIC_CHORD_SPEED`), not by `target / measured`; the latter is
+wrong by the measurement speed and made the scan several times too slow. A guard
+rejects a correction that would leave the sky rate more than 2x off the target,
+so a single bad measurement cannot wreck a session.
+
 ### 9.3 Slit axis and recon anisotropy
 
 In the recon, **X is the scan** (the number of columns equals the number of
@@ -523,6 +530,22 @@ rescale adds a second interpolation on top of an already anisotropic recon. Use
 
 The acceptance criteria in §5 summarise what to check; §6 maps symptoms to
 causes and actions.
+
+### 9.7 Capture edges: leading pre-load, adaptive stop and per-row duration
+
+Three details keep the recorded SER close to the disk:
+
+- **Leading pre-load** (`SCAN_PRELOAD_SECONDS`): a short forward move before the
+  capture starts, to take up the RA backlash left by the reverse padding backup.
+  Without it the first frames are recorded while the mount is still stationary,
+  which shows up as a duplicated strip at the leading edge of the recon.
+- **Adaptive trailing stop** (`TRAILING_LIMB_STOP`): the scan watches the live
+  frame's stddev and finishes `TRAILING_MARGIN_ARCSEC` after the trailing limb
+  leaves the slit, instead of always recording the full trailing padding. The
+  time cap still applies if the live stream stops during the capture.
+- **Per-row duration**: a mosaic row is sized to the **chord** at its Dec
+  (`expected_chord_arcsec`), not to the full diameter, so outer rows do not
+  record the missing part of the diameter as empty sky.
 
 ---
 

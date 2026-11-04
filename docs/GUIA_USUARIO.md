@@ -432,6 +432,13 @@ el cielo se mueva exactamente `PIXEL_SCALE` por fotograma. Así se elimina la
 dependencia de que `FOCAL_LENGTH` y el FPS reportado sean exactos. El resultado
 se registra por barrido como `actual_xy` (≈1.000 cuando es correcto).
 
+La calibración mide la tasa del cielo barriendo a `MOSAIC_CHORD_SPEED` (16x) y
+escala el multiplicador de ciencia por la **tasa por unidad**
+(`medida / MOSAIC_CHORD_SPEED`), no por `target / medida`; esto último es
+incorrecto por la velocidad de medida y dejaba el barrido varias veces más
+lento. Una guarda rechaza una corrección que deje la tasa del cielo a más de 2x
+del objetivo, para que una medida mala no arruine la sesión.
+
 ### 9.3 Eje de la rendija y anisotropía del recon
 
 En el recon, **X es el barrido** (el número de columnas es el número de
@@ -530,6 +537,22 @@ anisótropo. Usa `--auto-scale` solo como último recurso.
 
 Los criterios de aceptación de §5 resumen qué comprobar; §6 mapea síntomas a
 causas y acciones.
+
+### 9.7 Bordes de captura: precarga de entrada, parada adaptativa y duración por fila
+
+Tres detalles mantienen el SER cerca del disco:
+
+- **Precarga de entrada** (`SCAN_PRELOAD_SECONDS`): un avance corto antes de
+  empezar a capturar, para tomar la holgura (backlash) de AR que deja el
+  retroceso de padding. Sin ella, los primeros frames se graban con el monte
+  aún parado, y se ve una franja duplicada en el borde de entrada del recon.
+- **Parada adaptativa de salida** (`TRAILING_LIMB_STOP`): el barrido vigila el
+  `stddev` del frame vivo y termina `TRAILING_MARGIN_ARCSEC` después de que el
+  limbo de salida deja la rendija, en vez de grabar siempre todo el padding de
+  salida. El tope por tiempo sigue aplicándose si el stream vivo se corta.
+- **Duración por fila**: cada fila del mosaico se dimensiona a la **cuerda** a
+  su Dec (`expected_chord_arcsec`), no al diámetro completo, para que las filas
+  exteriores no graben como cielo vacío la parte que falta del diámetro.
 
 ---
 

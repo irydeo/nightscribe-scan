@@ -165,9 +165,20 @@ NUM_CYCLES         = 1
 PADDED_DURATION    = 3       # seconds of sky captured before/after the disk
 # If > 0, overrides PADDED_DURATION with a FIXED amount of sky on each side of
 # the disk. A fixed arcsec padding is independent of the FPS and therefore
-# makes repeated scans more repeatable. 200" is a good default at high focal
-# length; set to 0 to keep the historical seconds-based behaviour.
-PADDED_ARCSEC      = 200.0   # arcsec of sky padding on each side
+# makes repeated scans more repeatable. 100" is a good default; set to 0 to
+# keep the historical seconds-based behaviour.
+PADDED_ARCSEC      = 100.0   # arcsec of sky padding on each side
+
+# Forward pre-load before the capture starts: takes up the RA gear backlash
+# left by the reverse backup, so the first recorded frames are not a stationary
+# (duplicated) strip at the leading edge of the recon. 0 disables it.
+SCAN_PRELOAD_SECONDS = 0.3
+
+# Adaptive stop: finish the capture shortly after the trailing limb leaves the
+# slit (stddev drop), instead of always recording the full trailing padding.
+TRAILING_LIMB_STOP       = True
+TRAILING_MARGIN_ARCSEC   = 50.0   # sky kept after the trailing limb
+TRAILING_STDDEV_FRACTION = 0.15   # threshold vs the peak stddev
 RETURN_MULTIPLIER  = 32.0    # fast slew rate (no capture)
 
 # ── 2b. Capture timing (FPS) ──────────────────────────────────────────────────
@@ -365,6 +376,10 @@ CONFIG_SCHEMA = [
         ("NUM_CYCLES", "Cycles in the single-scan mode."),
         ("PADDED_DURATION", "Seconds of sky padding per side (if PADDED_ARCSEC=0)."),
         ("PADDED_ARCSEC", "Fixed arcsec padding per side (0 = use PADDED_DURATION)."),
+        ("SCAN_PRELOAD_SECONDS", "Forward pre-load (s) before capturing (0 = off)."),
+        ("TRAILING_LIMB_STOP", "Stop the capture after the trailing limb."),
+        ("TRAILING_MARGIN_ARCSEC", "Sky kept after the trailing limb (arcsec)."),
+        ("TRAILING_STDDEV_FRACTION", "Trailing threshold vs the peak stddev."),
         ("RETURN_MULTIPLIER", "Fast slew multiplier for repositioning."),
     ]),
     ("fps", [
@@ -486,6 +501,24 @@ def _coerce(value, template):
     return value
 
 
+def _apply_values(values):
+    """Apply {CONSTANT_NAME: value} to the module globals, coercing the type.
+
+    Used by Start (so the capture runs with exactly what the panel shows) and
+    by Save (so the file and the live values stay in agreement).
+    """
+    if not values:
+        return
+    for section, entries in CONFIG_SCHEMA:
+        for name, _help in entries:
+            if name in values and name in globals():
+                try:
+                    globals()[name] = _coerce(str(values[name]),
+                                              globals()[name])
+                except:
+                    pass
+
+
 def apply_config_file(verbose=True):
     """Override the module constants from nightscribe-scan.cfg (if present)."""
     global _EPHEMERIS_DIAMETER, SOLAR_DIAMETER
@@ -501,8 +534,16 @@ def apply_config_file(verbose=True):
                   "to restore it.".format(CONFIG_FILE_NAME, CONFIG_FILE_NAME))
         return None
     try:
-        with open(path, "r") as fh:
-            data = _parse_ini(fh.read())
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        # The config may have been written by the panel in the system encoding
+        # (cp1252 on Windows); decode tolerantly so a stray non-ASCII byte in a
+        # comment cannot make the whole file unreadable.
+        try:
+            text = raw.decode("utf-8")
+        except Exception:
+            text = raw.decode("latin-1")
+        data = _parse_ini(text)
     except Exception as e:
         print("Config: could not read {} ({})".format(path, e))
         return None
@@ -680,6 +721,20 @@ def apply_scan_calibration(factor):
         padded_seconds = float(PADDED_DURATION)
     scan_duration = 2.0 * padded_seconds + crossing_time
     return scan_multiplier
+
+
+def sky_rate_per_unit():
+    """Sky arcsec/s per multiplier unit: the calibrated value when known.
+
+    The self-calibration measures the mount's real rate per unit at
+    MOSAIC_CHORD_SPEED; using it (instead of the nominal SIDEREAL) makes the
+    logged actual_xy reflect the true X sampling, not the mount's deviation
+    from the nominal sidereal rate.
+    """
+    cal = _calibration[0]
+    if cal.get("applied") and cal.get("measured_per_unit"):
+        return cal["measured_per_unit"]
+    return SIDEREAL
 
 
 def _median_fps(samples=None, interval=None):
@@ -1470,6 +1525,24 @@ def effective_slit_arcsec():
     slit_px = (MOSAIC_SLIT_LENGTH_MM * scale * 1000.0 / PIXEL_SIZE)
     return min(float(roi.Width), slit_px) * PIXEL_SCALE / scale
 
+
+def expected_chord_arcsec(dec_offset_arcsec, slit_arcsec, solar_diameter):
+    """On-disk RA span (chord) of the disk at a slit offset.
+
+    MOSAIC geometry: with q the signed Dec offset of the slit centre, S the
+    effective slit length and R the solar radius,
+
+        e = max(0, |q| - S/2)          # nearest slit edge to the disk centre
+        chord = 2 * sqrt(R^2 - e^2)
+
+    Returns the chord in arcsec (0 if the slit is off the disk). This is the
+    span a mosaic row actually crosses, which can be much shorter than the
+    diameter near the poles.
+    """
+    R = solar_diameter / 2.0
+    e = max(0.0, abs(dec_offset_arcsec) - slit_arcsec / 2.0)
+    return 2.0 * math.sqrt(max(R * R - e * e, 0.0))
+
 def _init_dec_sign():
     """Learn whether MoveAxis(1, +) increases or decreases mount.Dec."""
     if _dec_sign[0] is not None:
@@ -1617,6 +1690,29 @@ def measure_chord(rewind=False):
             pass
         watcher.stop()
 
+def scan_rate_calibration_factor(measured_rate, measure_speed, target,
+                                 scan_multiplier):
+    """Factor that scales scan_multiplier so the sky rate becomes ``target``.
+
+    ``measured_rate`` is the sky rate (arcsec/s) measured while slewing at
+    ``measure_speed`` (sidereal multiplier units), so the mount's rate per unit
+    is ``measured_rate / measure_speed``. The multiplier needed for ``target``
+    is ``target / per_unit``; the factor is that divided by the current
+    multiplier. Returns None for an unusable measurement.
+
+    This is the piece that was wrong: the old code used
+    ``target / measured_rate`` directly, ignoring that the measurement is taken
+    at ``measure_speed`` (16x), not at the science rate. That made the scan
+    ~4.6x too slow and the recon stretched in X (actual_xy ~4.1 instead of ~1).
+    """
+    if measured_rate <= 0 or measure_speed <= 0 or scan_multiplier <= 0:
+        return None
+    per_unit = measured_rate / float(measure_speed)
+    if per_unit <= 0:
+        return None
+    return (target / per_unit) / scan_multiplier
+
+
 def calibrate_scan_rate():
     """Self-calibrate the scan multiplier from a disk traversal.
 
@@ -1662,8 +1758,12 @@ def calibrate_scan_rate():
                     below += 1
                     if below >= 2:
                         mount.Stop()
-                        time.sleep(0.2)
+                        # Take t1 the moment the mount stops: the settle sleep
+                        # below is only to let mount.RA read cleanly and must
+                        # not inflate the traverse time (it biased the measured
+                        # rate low).
                         t1 = time.time()
+                        time.sleep(0.2)
                         ra_end = mount.RA
                         break
                 else:
@@ -1698,12 +1798,28 @@ def calibrate_scan_rate():
     rates.sort()
     rate = rates[len(rates) // 2]
     target = PIXEL_SCALE * fps
-    factor = target / rate
+    factor = scan_rate_calibration_factor(rate, MOSAIC_CHORD_SPEED, target,
+                                          scan_multiplier)
+    if factor is None:
+        print("  Calibration: invalid measurement; keeping {:.2f}x".format(
+              scan_multiplier))
+        return None
+    # Sanity guard: a bad measurement must not be allowed to wreck the scan.
+    # With the corrected formula the factor is a small correction (~1); the old
+    # buggy formula (target/rate) produced ~0.24 here and is rejected.
+    corrected = scan_multiplier * factor * SIDEREAL
+    if not (0.5 * target <= corrected <= 2.0 * target):
+        print("  Calibration: correction out of range ({:.2f}\"/s vs target "
+              "{:.2f}\"/s); keeping {:.2f}x".format(
+                  corrected, target, scan_multiplier))
+        return None
     apply_scan_calibration(factor)
     _calibration[0] = {"applied": True, "factor": factor,
-                       "measured_rate": rate, "target_rate": target}
-    print("  measured {:.2f}\"/s vs target {:.2f}\"/s -> factor {:.4f}".format(
-          rate, target, factor))
+                       "measured_rate": rate, "target_rate": target,
+                       "measured_per_unit": rate / MOSAIC_CHORD_SPEED}
+    print("  measured {:.2f}\"/s at {:.1f}x -> {:.2f}\"/s per unit".format(
+          rate, MOSAIC_CHORD_SPEED, rate / MOSAIC_CHORD_SPEED))
+    print("  target {:.2f}\"/s -> factor {:.4f}".format(target, factor))
     print("  new scan: {:.2f}x ({:.1f}\"/s), duration {:.1f}s".format(
           scan_multiplier, scan_speed, scan_duration))
     return factor
@@ -2115,7 +2231,7 @@ def write_session_meta(extra=None, verbose=True):
 
 scan_records = []
 
-def scan_once(limb_ra, label=None, mosaic_mode=False):
+def scan_once(limb_ra, label=None, mosaic_mode=False, crossing_arcsec=None):
     """Back up padding, optional capture, scan across the disk, stop.
 
     Returns a dict with the scan record (displacement, timings, frame counts
@@ -2126,10 +2242,17 @@ def scan_once(limb_ra, label=None, mosaic_mode=False):
     - The mount's RA rate is a coordinate rate; the true sky rate is
       rate*cos(Dec). Dividing the multiplier by cos(Dec) (COS_DEC_CORRECTION)
       keeps one pixel per frame and the X:Y ratio at 1.000 at any declination.
-    - The padding backup uses the same rate as the scan (mosaic) instead of the
-      fast LIMB_SEARCH_SPEED. The old single-scan backup was longer than the
-      padding budget in scan_duration, which wastes leading padding and can clip
-      the trailing limb at high focal length / low FPS.
+    - The padding backup uses the same rate as the scan, so the padding is
+      symmetric and exact (the old single-scan backup at LIMB_SEARCH_SPEED was
+      longer than the padding budget and could clip the trailing limb).
+    - A short forward pre-load (SCAN_PRELOAD_SECONDS) takes up the RA backlash
+      before the capture starts, so the first recorded frames are not a
+      stationary (duplicated) strip at the leading edge.
+
+    ``crossing_arcsec`` overrides the on-disk span used to size the scan
+    (default: the full solar diameter). Mosaic rows pass the chord at their
+    Dec, so an outer row does not record the missing part of the diameter as
+    empty sky.
 
     The mount only starts moving once SharpCap confirms that frames are being
     written, so the leading limb is not lost during file creation.
@@ -2140,7 +2263,17 @@ def scan_once(limb_ra, label=None, mosaic_mode=False):
     else:
         cosd = 1.0
         scan_rate = scan_multiplier
-    backup_rate = -scan_rate if mosaic_mode else -LIMB_SEARCH_SPEED
+    backup_rate = -scan_rate
+
+    # On-disk span of this scan: the full diameter for a single scan, the chord
+    # at the row's Dec for a mosaic row. Duration = padding + span + padding.
+    if crossing_arcsec is not None and crossing_arcsec > 0:
+        crossing = crossing_arcsec
+    else:
+        crossing = SOLAR_DIAMETER
+    duration = 2.0 * padded_seconds + crossing / scan_speed
+    trail_margin_s = (TRAILING_MARGIN_ARCSEC / scan_speed
+                      if scan_speed > 0 else 0.0)
 
     # Fixed arcsec padding (padded_seconds) rather than a fixed time in the
     # non-mosaic path, so the captured sky is the same at any FPS.
@@ -2148,6 +2281,15 @@ def scan_once(limb_ra, label=None, mosaic_mode=False):
     _sleep_abortable(padded_seconds)
     mount.Stop()
     time.sleep(0.2)
+
+    # Forward pre-load: take up the RA gear backlash left by the reverse backup
+    # so the scan starts moving straight away. It eats into the leading padding
+    # by at most SCAN_PRELOAD_SECONDS, never more than half of it.
+    if SCAN_PRELOAD_SECONDS > 0:
+        mount.MoveAxis(0, scan_rate)
+        _sleep_abortable(min(SCAN_PRELOAD_SECONDS, 0.5 * padded_seconds))
+        mount.Stop()
+        time.sleep(0.1)
 
     ra_start = mount.RA
     dec_start = mount.Dec
@@ -2179,6 +2321,16 @@ def scan_once(limb_ra, label=None, mosaic_mode=False):
     else:
         frames_move0 = None
 
+    # Adaptive trailing-limb stop: watch the live frame's stddev and finish a
+    # little after the disk has left the slit, instead of always recording the
+    # full trailing padding. Falls back to the time cap if the live stream is
+    # not delivering frames during the capture.
+    watcher = None
+    if TRAILING_LIMB_STOP:
+        watcher = FrameWatcher(cam)
+        watcher.start()
+        watcher.wait_first(1.0)
+
     # ── The scan itself ──────────────────────────────────────────────────────
     # Sleep in small steps so Ctrl+C stops the mount immediately, and watch the
     # capture so a stall (disk full, driver hang, frame limit) aborts the scan
@@ -2188,30 +2340,50 @@ def scan_once(limb_ra, label=None, mosaic_mode=False):
     frames_prev = frames_move0
     last_progress = t_move0
     scan_problem = None
-    while True:
-        check_abort()
-        elapsed = time.time() - t_move0
-        remaining = scan_duration - elapsed
-        if remaining <= 1e-3:
-            break
-        time.sleep(min(0.05, remaining))
-        if ENABLE_CAPTURE:
-            try:
-                if not cam.Capturing:
-                    scan_problem = "capture stopped mid-scan"
-                    break
-            except:
-                pass
-            now = _capture_frame_count()
-            if now is not None and frames_prev is not None:
-                if now != frames_prev:
-                    frames_prev = now
-                    last_progress = time.time()
-                elif CAPTURE_STALL_SECONDS > 0 and \
-                        (time.time() - last_progress) > CAPTURE_STALL_SECONDS:
-                    scan_problem = "no frames written for {:.1f}s".format(
-                        CAPTURE_STALL_SECONDS)
-                    break
+    peak = 0.0
+    trail_start = None
+    trailing_stop = False
+    try:
+        while True:
+            check_abort()
+            elapsed = time.time() - t_move0
+            remaining = duration - elapsed
+            if remaining <= 1e-3:
+                break
+            time.sleep(min(0.05, remaining))
+            if watcher is not None and watcher.latest is not None:
+                s = watcher.latest[1]
+                if s > peak:
+                    peak = s
+                if peak > ON_DISK_STDDEV and s < max(
+                        LIMB_STDDEV_MIN, peak * TRAILING_STDDEV_FRACTION):
+                    if trail_start is None:
+                        trail_start = time.time()
+                    elif (time.time() - trail_start) >= trail_margin_s:
+                        trailing_stop = True
+                        break
+                else:
+                    trail_start = None
+            if ENABLE_CAPTURE:
+                try:
+                    if not cam.Capturing:
+                        scan_problem = "capture stopped mid-scan"
+                        break
+                except:
+                    pass
+                now = _capture_frame_count()
+                if now is not None and frames_prev is not None:
+                    if now != frames_prev:
+                        frames_prev = now
+                        last_progress = time.time()
+                    elif CAPTURE_STALL_SECONDS > 0 and \
+                            (time.time() - last_progress) > CAPTURE_STALL_SECONDS:
+                        scan_problem = "no frames written for {:.1f}s".format(
+                            CAPTURE_STALL_SECONDS)
+                        break
+    finally:
+        if watcher is not None:
+            watcher.stop()
     mount.Stop()
     t_move1 = time.time()
 
@@ -2229,12 +2401,16 @@ def scan_once(limb_ra, label=None, mosaic_mode=False):
             if elapsed > 0:
                 actual_fps = (frames_end - frames_move0) / elapsed
 
+    if trailing_stop:
+        print("  Trailing limb: stopped after {:.0f}\" margin.".format(
+              TRAILING_MARGIN_ARCSEC))
+
     if scan_problem is not None:
         print("  SCAN PROBLEM ({}): {}".format(label, scan_problem))
         record = _make_scan_record(label, limb_ra, ra_start, dec_start, cosd,
                                    scan_rate, t_move0, t_move1, t_capture0,
                                    frames_move0, frames_end, actual_fps,
-                                   problem=scan_problem)
+                                   problem=scan_problem, duration=duration)
         scan_records.append(record)
         write_scan_log(verbose=False)
         write_scan_stats(record)
@@ -2244,7 +2420,8 @@ def scan_once(limb_ra, label=None, mosaic_mode=False):
     disp = abs(ra_diff_arcsec(mount.RA, limb_ra))
     record = _make_scan_record(label, limb_ra, ra_start, dec_start, cosd,
                                scan_rate, t_move0, t_move1, t_capture0,
-                               frames_move0, frames_end, actual_fps)
+                               frames_move0, frames_end, actual_fps,
+                               duration=duration)
     scan_records.append(record)
     _check_consistency(record)
     write_scan_log(verbose=False)   # keep the CSV current even if we crash later
@@ -2254,11 +2431,13 @@ def scan_once(limb_ra, label=None, mosaic_mode=False):
 
 def _make_scan_record(label, limb_ra, ra_start, dec_start, cosd, scan_rate,
                       t_move0, t_move1, t_capture0, frames_move0, frames_end,
-                      actual_fps, problem=None):
+                      actual_fps, problem=None, duration=None):
     """Build the per-scan record (also used for a scan that had a problem)."""
+    if duration is None:
+        duration = scan_duration
     frames = (frames_end - frames_move0
               if frames_end is not None and frames_move0 is not None else None)
-    expected = scan_duration * fps if fps > 0 else 0.0
+    expected = duration * fps if fps > 0 else 0.0
     short_pct = 0.0
     if frames is not None and expected > 0:
         short_pct = max(0.0, (expected - frames) / expected)
@@ -2282,7 +2461,7 @@ def _make_scan_record(label, limb_ra, ra_start, dec_start, cosd, scan_rate,
         "cos_dec_correction": cosd,
         "fps_used": fps,
         "scan_multiplier": scan_multiplier,
-        "scan_duration": scan_duration,
+        "scan_duration": duration,
         "padded_seconds": padded_seconds,
         "t_move0": t_move0,
         "t_move1": t_move1,
@@ -2299,7 +2478,7 @@ def _make_scan_record(label, limb_ra, ra_start, dec_start, cosd, scan_rate,
         # cos(Dec), so the ratio is just actual_fps / fps_used (1.000 = the
         # scan moved exactly one pixel-width of sky per frame).
         "actual_xy": (PIXEL_SCALE /
-                      (scan_rate * SIDEREAL * cosd / actual_fps)
+                      (scan_rate * sky_rate_per_unit() * cosd / actual_fps)
                       if actual_fps > 0 else 0.0),
     }
 
@@ -2618,6 +2797,14 @@ def run_mosaic():
             print("\n-- MOSAIC row {}/{} scan {}/{} ({}) --".format(
                   row + 1, plan["rows"], scan + 1, MOSAIC_SCANS_PER_ROW, label))
 
+            # On-disk span at this row's Dec: the chord at the nearest slit
+            # edge (MOSAIC geometry). Sizing the scan to the chord instead of
+            # the full diameter stops outer rows from recording the missing
+            # part of the diameter as empty sky.
+            row_chord = expected_chord_arcsec(
+                (mount.Dec - centre_dec) * 3600.0, effective_slit_arcsec(),
+                SOLAR_DIAMETER)
+
             # Retry the scan once on a capture problem before giving up on it.
             record = None
             attempts = 1 + max(0, SCAN_RETRIES)
@@ -2631,7 +2818,8 @@ def run_mosaic():
                           label, k + 1, attempts))
                     continue
                 try:
-                    record = scan_once(attempt_limb, label, mosaic_mode=True)
+                    record = scan_once(attempt_limb, label, mosaic_mode=True,
+                                       crossing_arcsec=row_chord)
                     break
                 except RuntimeError as e:
                     print("  {}: attempt {}/{} failed - {}".format(
@@ -3032,8 +3220,12 @@ state = {"running": False, "message": "idle", "started": ""}
 
 def _read(path, default=""):
     try:
-        with open(path, "r") as fh:
-            return fh.read()
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        try:
+            return raw.decode("utf-8")
+        except Exception:
+            return raw.decode("latin-1")
     except:
         return default
 
@@ -3067,7 +3259,7 @@ def _schema():
 
 def _write_cfg(values):
     """Write nightscribe-scan.cfg with the schema's comments."""
-    lines = ["# NightScribe configuration — written by the UI.", ""]
+    lines = ["# NightScribe configuration - written by the UI.", ""]
     for section, entries in CONFIG_SCHEMA:
         lines.append("[{}]".format(section))
         for name, help_text in entries:
@@ -3078,24 +3270,6 @@ def _write_cfg(values):
             lines.append("{} = {}".format(name.lower(), val))
         lines.append("")
     _write(CFG, "\n".join(lines))
-
-
-def _apply_values(values):
-    """Apply {CONSTANT_NAME: value} to the module globals, coercing the type.
-
-    Used by Start (so the capture runs with exactly what the panel shows) and
-    by Save (so the file and the live values stay in agreement).
-    """
-    if not values:
-        return
-    for section, entries in CONFIG_SCHEMA:
-        for name, _help in entries:
-            if name in values and name in globals():
-                try:
-                    globals()[name] = _coerce(str(values[name]),
-                                              globals()[name])
-                except:
-                    pass
 
 
 def _load_profiles():

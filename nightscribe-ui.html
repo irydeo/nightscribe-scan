@@ -177,7 +177,7 @@ const EMBEDDED_SCHEMA = [
       {
         "name": "SOLAR_DIAMETER",
         "type": "float",
-        "default": 1934.8248794201108,
+        "default": 1935.153009775332,
         "help": "Fallback solar diameter (arcsec) when no ephemeris."
       }
     ]
@@ -212,8 +212,32 @@ const EMBEDDED_SCHEMA = [
       {
         "name": "PADDED_ARCSEC",
         "type": "float",
-        "default": 200.0,
+        "default": 100.0,
         "help": "Fixed arcsec padding per side (0 = use PADDED_DURATION)."
+      },
+      {
+        "name": "SCAN_PRELOAD_SECONDS",
+        "type": "float",
+        "default": 0.3,
+        "help": "Forward pre-load (s) before capturing (0 = off)."
+      },
+      {
+        "name": "TRAILING_LIMB_STOP",
+        "type": "bool",
+        "default": true,
+        "help": "Stop the capture after the trailing limb."
+      },
+      {
+        "name": "TRAILING_MARGIN_ARCSEC",
+        "type": "float",
+        "default": 50.0,
+        "help": "Sky kept after the trailing limb (arcsec)."
+      },
+      {
+        "name": "TRAILING_STDDEV_FRACTION",
+        "type": "float",
+        "default": 0.15,
+        "help": "Trailing threshold vs the peak stddev."
       },
       {
         "name": "RETURN_MULTIPLIER",

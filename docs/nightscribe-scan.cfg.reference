@@ -34,7 +34,15 @@ num_cycles = 1
 # Seconds of sky padding per side (used when padded_arcsec = 0).
 padded_duration = 3
 # Fixed arcsec padding per side (0 = use padded_duration). Recommended.
-padded_arcsec = 200
+padded_arcsec = 100
+# Forward pre-load (s) before capturing, to take up the RA backlash (0 = off).
+scan_preload_seconds = 0.3
+# Stop the capture after the trailing limb leaves the slit.
+trailing_limb_stop = true
+# Sky kept after the trailing limb (arcsec).
+trailing_margin_arcsec = 50
+# Trailing threshold as a fraction of the peak stddev.
+trailing_stddev_fraction = 0.15
 # Fast slew multiplier for repositioning.
 return_multiplier = 32
 
