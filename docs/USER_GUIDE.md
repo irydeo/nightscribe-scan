@@ -54,22 +54,30 @@ integrity checks and session bookkeeping.
 ### 2.1 External configuration and control panel
 
 **Config file.** Everything tunable is in `nightscribe-scan.cfg` (INI, in the
-same folder), editable by hand with any text editor. A commented template is in
+same folder), editable by hand with any text editor. You only need to set a few
+values; everything else has a default. Start from the minimal
 `nightscribe-scan.cfg.example`:
 
 ```ini
 [optics]
 # Effective focal length at the sensor (mm). Sets the scan rate.
 focal_length = 714
+# Camera pixel size (um).
+pixel_size = 2
+
+# Only for a full-disk mosaic:
+[scan]
+enable_mosaic = false
 
 [mosaic]
-enable_mosaic = true
+mosaic_slit_length_mm = 7
 mosaic_scans_per_row = 5
 ```
 
-Missing keys use the default; lines starting with `#` are ignored. The banner
-says where it was loaded from. You can also point at a path with the
-`NIGHTSCRIBE_CONFIG` environment variable.
+The complete list of settings (with their defaults) is in
+`nightscribe-scan.cfg.reference`. Missing keys use the default; lines starting
+with `#` are ignored. The banner says where it was loaded from. You can also
+point at a path with the `NIGHTSCRIBE_CONFIG` environment variable.
 
 **Control panel (HTML).** It works in **two modes**:
 
@@ -517,7 +525,7 @@ causes and actions.
 
 - `nightscribe-scan.py` — capture script (config block, `scan_once()`,
   `calibrate_scan_rate()`, `measure_slit_scale()`).
-- `nightscribe-scan.cfg` / `nightscribe-scan.cfg.example` — configuration.
+- `nightscribe-scan.cfg.example` (minimal) / `nightscribe-scan.cfg.reference` (full) — configuration.
 - `nightscribe-ui.py` / `nightscribe-ui.html` — control panel (profiles, config, start/stop).
 - `tools/build_ui.py` — regenerates the panel's embedded schema.
 - `nightscribe-profiles.json` — profiles saved by the panel.

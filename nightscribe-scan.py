@@ -28,7 +28,7 @@
 # The chord method, the geometry and the reasoning behind the design are
 # explained in the user guide's "Deep dive" section.
 #
-# User guide: USER_GUIDE.md (English) / GUIA_USUARIO.md (Spanish).
+# User guide: docs/USER_GUIDE.md (English) / docs/GUIA_USUARIO.md (Spanish).
 #
 # Configuration lives in nightscribe-scan.cfg (INI, next to this file): edit it
 # by hand or with the HTML control panel. The panel is nightscribe-ui.py +
@@ -230,7 +230,7 @@ LIMB_DARK_MULT     = 5.0
 #
 # This switch applies to the single-sequence path (ENABLE_MOSAIC = False). The
 # mosaic path has its own MOSAIC_AUTO_CENTER_DEC switch, because it can centre
-# reliably even when the disk overfills the slit. See USER_GUIDE.md, 9.4.
+# reliably even when the disk overfills the slit. See docs/USER_GUIDE.md, 9.4.
 ENABLE_DEC_CENTERING = True
 
 DEC_INTERVAL       = 2       # re-center every N cycles
@@ -488,6 +488,8 @@ def apply_config_file(verbose=True):
     if path is None:
         if verbose:
             print("Config: no {} found; using defaults.".format(CONFIG_FILE_NAME))
+            print("        Copy {} to {} to set your optics.".format(
+                CONFIG_FILE_NAME + ".example", CONFIG_FILE_NAME))
         return None
     try:
         with open(path, "r") as fh:
@@ -1169,7 +1171,7 @@ def center_dec():
     Note: this function is only called when ENABLE_DEC_CENTERING is True.
     Its metric assumes the solar disk fits along the slit axis; when it does
     not, set ENABLE_DEC_CENTERING = False instead of relying on this loop.
-    See the switch documentation in CONFIGURATION and USER_GUIDE.md, 9.4.
+    See the switch documentation in CONFIGURATION and docs/USER_GUIDE.md, 9.4.
     """
     for iteration in range(1, DEC_MAX_CORRECTIONS + 1):
         check_abort()
@@ -2895,7 +2897,7 @@ def run_capture():
                       row, scan, rel, label, disp))
             print("")
             print("Stack the scans of each row (tools/align_stack_recon.py), then")
-            print("stitch the rows (tools/mosaic_from_recon.py). See USER_GUIDE.md.")
+            print("stitch the rows (tools/mosaic_from_recon.py). See docs/USER_GUIDE.md.")
     else:
         print("Cycles: {}  Total: {:.0f}s ({:.1f} min)  Avg: {:.1f}s/cycle".format(
               len(drift_log), total_time, total_time / 60,

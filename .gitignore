@@ -1,5 +1,5 @@
 # ── Design notes (kept locally, not published) ────────────────────────────────
-docs/design/
+design/
 
 # ── User configuration and profiles (keep the .example) ───────────────────────
 nightscribe-scan.cfg

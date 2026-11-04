@@ -95,8 +95,8 @@ numpy, opencv-python. Optional: astropy (FITS), tifffile (TIF; PIL fallback).
 
 See also
 --------
-- ``GUIA_USUARIO.md`` / ``USER_GUIDE.md`` — user guide, "The tools" and
-  "Deep dive" sections.
+- ``docs/GUIA_USUARIO.md`` / ``docs/USER_GUIDE.md`` — user guide, "The tools"
+  and "Deep dive" sections.
 - ``tools/mosaic_from_recon.py`` — stitches the per-row stacks.
 """
 

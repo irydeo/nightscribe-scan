@@ -1,151 +1,28 @@
-# NightScribe configuration — copy to "nightscribe-scan.cfg" and edit.
+# NightScribe configuration — copy to "nightscribe-scan.cfg".
 #
-# This file is what the script reads. Values not present here use the built-in
-# defaults. Lines starting with # or ; are comments. Keys are the constant
-# names in lower case; sections are only for organisation.
+# You normally only need to set the [optics] values below. Everything else has
+# a built-in default and does not need to be here; the complete list is in
+# "nightscribe-scan.cfg.reference" and can be edited from the HTML control
+# panel (nightscribe-ui.py). See docs/USER_GUIDE.md §2.1.
 #
-# You can also edit it from the HTML UI (nightscribe-ui.py), which writes this
-# same file with these comments.
+# Keys are the constant names in lower case; lines starting with # or ; are
+# comments. Missing keys keep their default.
 
 [optics]
-# Effective focal length at the sensor (mm). Sets the scan rate. Measure it on
-# the NATIVE recon, not on a resampled JSol'Ex stack.
+# Effective focal length at the sensor (mm). THE value to get right: it sets
+# the scan rate. Measure it on a NATIVE recon, not on a resampled JSol'Ex
+# stack. Too large -> the recon is stretched in X; too small -> compressed.
 focal_length = 714
 # Camera pixel size (um).
 pixel_size = 2
-# Arcsec/s per sidereal multiplier unit (ASCOM standard).
-sidereal = 15.04
-# Compute the solar diameter from the date (~0.01% accurate).
-use_ephemeris = true
-# Force the solar diameter (arcsec); 0 = auto.
-ephemeris_diameter_override = 0
-# Fallback solar diameter (arcsec) when no ephemeris is available.
-solar_diameter = 1920
 
+# ── Only for a full-disk mosaic ───────────────────────────────────────────────
+# Set enable_mosaic = true for a multi-row mosaic; false for a single strip.
 [scan]
-# Write SER files (false = dry run).
-enable_capture = true
-# Run the auto-exposure loop.
-enable_auto_exp = true
-# Cycles in the single-scan mode.
-num_cycles = 1
-# Seconds of sky padding per side (used when padded_arcsec = 0).
-padded_duration = 3
-# Fixed arcsec padding per side (0 = use padded_duration). Recommended.
-padded_arcsec = 200
-# Fast slew multiplier for repositioning.
-return_multiplier = 32
-
-[fps]
-# Force the capture FPS; 0 = measure after auto-exposure.
-capture_fps = 0
-# Readings of CurrentFrameRate to median.
-fps_samples = 5
-# Seconds between FPS readings.
-fps_sample_interval = 0.2
-# Measure the real capture FPS for this many seconds (writes a probe SER); 0 = off.
-fps_probe_seconds = 0
-# Seconds to wait for the capture to actually start.
-capture_start_timeout = 5
-# Seconds to settle after the first frame before moving.
-capture_start_settle = 0.1
-# Abort a scan if no frames are written for this long (0 = off).
-capture_stall_seconds = 3
-# Warn if this fraction of frames is missing.
-frames_short_tol = 0.1
-# Minimum free disk space to start a scan (GB).
-capture_min_free_gb = 1
-
-[limb]
-# Multiplier for the limb search.
-limb_search_speed = 4
-# Seconds between limb samples.
-limb_sample_interval = 0.05
-# Seconds before giving up the limb search.
-limb_max_search = 120
-# Minimum stddev to call it on-disk.
-limb_stddev_min = 500
-# Stddev that clearly means on-disk.
-on_disk_stddev = 2000
-# Threshold = dark stddev x this.
-limb_dark_mult = 5
-
-[dec]
-# Use the left/right Dec centring loop (single-scan path).
-enable_dec_centering = true
-# Re-centre every N cycles.
-dec_interval = 2
-# Centred when |L-R|/(L+R) is below this.
-dec_center_tolerance = 0.03
-# Max Dec nudges per centring.
-dec_max_corrections = 8
-# Dec nudge multiplier.
-dec_nudge_speed = 3
-# Seconds to settle after a nudge.
-dec_settle_time = 0.3
-# Re-centre Dec between scans of a row if it drifts more than this (arcsec).
-dec_drift_tol_arcsec = 10
+enable_mosaic = false
 
 [mosaic]
-# true = multi-row mosaic; false = single scan.
-enable_mosaic = false
 # Physical slit length (mm).
 mosaic_slit_length_mm = 7
-# Slit re-imaging magnification (measured live when possible).
-mosaic_slit_image_scale = 1
-# Fractional overlap between adjacent rows.
-mosaic_overlap = 0.15
-# Extra sky above/below the disk (arcsec).
-mosaic_margin_arcsec = 100
-# Scans per row.
+# Full scans captured per row.
 mosaic_scans_per_row = 5
-# Auto Dec centring by chords.
-mosaic_auto_center_dec = true
-# Chord centring iterations.
-mosaic_center_max_iter = 3
-# Assumed residual after centring (arcsec).
-mosaic_center_residual_arcsec = 300
-# Dec move multiplier between rows.
-mosaic_dec_speed = 3
-# Backlash taken up before each approach (arcsec).
-mosaic_dec_backlash = 30
-# Seconds to settle after a Dec move.
-mosaic_dec_settle = 0.5
-# Multiplier for chord/calibration traverses.
-mosaic_chord_speed = 16
-
-[exposure]
-# Histogram percentile to target (0.995 ignores a few hot pixels).
-exp_percentile = 0.995
-# Target level as a fraction of full scale.
-exp_target_level = 0.88
-# Convergence window as a fraction of full scale.
-exp_tolerance = 0.04
-# Max auto-exposure iterations.
-exp_max_attempts = 6
-
-[calibration]
-# Self-calibrate the scan rate at session start.
-calibrate_scan_rate = true
-# Calibration traverses to average.
-calibration_samples = 1
-# Warn if X/Y drifts more than this between scans.
-consistency_tol_xy = 0.03
-# Warn if the slit extent drifts more than this.
-consistency_tol_extent = 0.03
-# Retries per failed scan.
-scan_retries = 1
-# Apply the 1/cos(Dec) RA-rate correction in both modes.
-cos_dec_correction = true
-# Measure the slit extent in a live frame.
-measure_slit_extent = true
-# Bands for the slit extent profile.
-slit_extent_bands = 48
-
-[logging]
-# CSV path; empty = the capture folder.
-scan_log_path =
-# JSONL path; empty = the capture folder.
-scan_stats_path =
-# Session JSON path; empty = the capture folder.
-session_meta_path =

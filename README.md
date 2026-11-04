@@ -46,8 +46,10 @@ here.
 
 ## Quick start
 
-1. Copy `nightscribe-scan.cfg.example` to `nightscribe-scan.cfg` and set at
-   least `focal_length` and `pixel_size` under `[optics]`.
+1. Copy `nightscribe-scan.cfg.example` to `nightscribe-scan.cfg`. You normally
+   only need to set `focal_length` and `pixel_size` under `[optics]` (plus the
+   `[mosaic]` keys if you capture a full-disk mosaic); every other setting has
+   a default. The complete list is in `nightscribe-scan.cfg.reference`.
 2. Connect the camera and mount in SharpCap, start Live View and set the ROI.
 3. Load `nightscribe-scan.py` in the SharpCap scripting console and run it.
    (Or run `nightscribe-ui.py` and open the control panel at
@@ -59,9 +61,10 @@ here.
 
 ## Documentation
 
-- User guide (English): [USER_GUIDE.md](USER_GUIDE.md)
-- Guía de usuario (español): [GUIA_USUARIO.md](GUIA_USUARIO.md)
-- Configuration template: [nightscribe-scan.cfg.example](nightscribe-scan.cfg.example)
+- User guide (English): [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+- Guía de usuario (español): [docs/GUIA_USUARIO.md](docs/GUIA_USUARIO.md)
+- Minimal configuration: [nightscribe-scan.cfg.example](nightscribe-scan.cfg.example)
+- Full configuration reference: [nightscribe-scan.cfg.reference](nightscribe-scan.cfg.reference)
 - Post-processing tools: [tools/](tools/)
 
 The user guide covers the quick start, every feature and, in its *Deep dive*
