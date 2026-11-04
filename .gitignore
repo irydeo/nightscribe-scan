@@ -1,0 +1,24 @@
+# ── Design notes (kept locally, not published) ────────────────────────────────
+docs/design/
+
+# ── User configuration and profiles (keep the .example) ───────────────────────
+nightscribe-scan.cfg
+nightscribe-profiles.json
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+
+# ── Capture and post-processing outputs ───────────────────────────────────────
+*.ser
+*.tif
+*.tiff
+*.fits
+*.fit
+*.fts
+recon/
+stacks/
+mosaic/
+scan_log.csv
+scan_stats.jsonl
+session_meta.json

@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NightScribe</title>
+<style>
+  :root { --bg:#12161c; --card:#1b222c; --fg:#e8edf3; --mut:#93a1b3;
+          --acc:#4da3ff; --ok:#3fbf7f; --err:#ff6b6b; --warn:#e0b341;
+          --line:#2a3441; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif;
+         display:flex; justify-content:center; padding:16px; }
+  .app { width:100%; max-width:560px; background:var(--card);
+         border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  header { display:flex; align-items:center; gap:8px; padding:12px 14px;
+           border-bottom:1px solid var(--line); }
+  header h1 { font-size:15px; margin:0; flex:1; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--mut); }
+  .dot.run { background:var(--ok); }
+  .dot.off { background:var(--warn); }
+  .tabs { display:flex; gap:4px; padding:8px 10px 0; flex-wrap:wrap; }
+  .tabs button { background:none; border:1px solid transparent; color:var(--mut);
+                 padding:5px 9px; border-radius:8px; cursor:pointer; font-size:12px; }
+  .tabs button.on { color:var(--fg); border-color:var(--line); background:#222b36; }
+  main { padding:10px 14px 4px; max-height:46vh; overflow:auto; }
+  section { display:none; }
+  section.on { display:block; }
+  .field { display:grid; grid-template-columns:1fr; gap:2px; margin-bottom:9px; }
+  .field label { font-size:12px; color:var(--mut); }
+  .field input[type=text], .field input[type=number] {
+      background:#0f141a; color:var(--fg); border:1px solid var(--line);
+      border-radius:7px; padding:6px 8px; width:100%; }
+  .field .bool { display:flex; align-items:center; gap:7px; }
+  footer { display:flex; gap:6px; padding:10px 14px; border-top:1px solid var(--line);
+           flex-wrap:wrap; align-items:center; }
+  button.act { background:#222b36; color:var(--fg); border:1px solid var(--line);
+               border-radius:8px; padding:6px 10px; cursor:pointer; font-size:12px; }
+  button.act.primary { background:var(--acc); border-color:var(--acc); color:#08111c;
+                       font-weight:600; }
+  button.act.danger { color:var(--err); }
+  button.act:disabled { opacity:.45; cursor:default; }
+  .grow { flex:1; min-width:120px; }
+  .status { font-size:12px; color:var(--mut); }
+  .status.warn { color:var(--warn); }
+  .status.err { color:var(--err); }
+  select { background:#0f141a; color:var(--fg); border:1px solid var(--line);
+           border-radius:7px; padding:6px 8px; width:100%; }
+  .hint { font-size:11px; color:var(--mut); margin:2px 0 10px; }
+  .profbar { padding:8px 14px; border-top:1px solid var(--line); display:flex; gap:6px;
+             align-items:center; flex-wrap:wrap; }
+  .badge { font-size:11px; color:var(--ok); }
+  .banner { padding:9px 14px; font-size:12px; background:#2a2410; color:var(--warn);
+            border-bottom:1px solid var(--line); display:none; }
+  .banner.on { display:block; }
+  .session { padding:10px 14px; border-bottom:1px solid var(--line); display:grid;
+             grid-template-columns:1fr 1fr; gap:8px; }
+  .session h2 { grid-column:1/-1; margin:0; font-size:12px; color:var(--mut);
+                text-transform:uppercase; letter-spacing:.04em; }
+  .session .cell { display:grid; gap:2px; }
+  .session label { font-size:11px; color:var(--mut); }
+  .session input, .session select { width:100%; }
+  dialog { background:var(--card); color:var(--fg); border:1px solid var(--line);
+           border-radius:12px; padding:0; width:min(480px,92vw); }
+  dialog::backdrop { background:#0008; }
+  dialog .body { padding:14px; display:grid; gap:8px; }
+  dialog .body input, dialog .body textarea { width:100%; background:#0f141a;
+      color:var(--fg); border:1px solid var(--line); border-radius:7px; padding:6px 8px; }
+  dialog .body textarea { min-height:56px; }
+  dialog footer { border-top:1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <span id="dot" class="dot off"></span>
+    <h1>NightScribe</h1>
+    <span id="conn" class="status">…</span>
+    <span id="status" class="status"></span>
+  </header>
+
+  <div class="banner" id="banner"></div>
+
+  <div class="session" id="session"></div>
+
+  <div class="tabs" id="tabs"></div>
+  <main id="main"></main>
+
+  <footer>
+    <button class="act" onclick="reload()">Reload</button>
+    <button class="act" onclick="restoreDefaults()">Defaults</button>
+    <button class="act" onclick="saveConfig()">Save config</button>
+    <button class="act primary" id="btnStart" onclick="start()">Start</button>
+    <button class="act danger" id="btnStop" onclick="stop()">Stop</button>
+  </footer>
+
+  <div class="profbar">
+    <select id="profiles" class="grow" onchange="onSelectProfile()"></select>
+    <button class="act" onclick="applyProfile()">Apply &amp; save</button>
+    <span id="activeBadge" class="badge"></span>
+  </div>
+  <div class="profbar">
+    <button class="act" onclick="newProfile()">New</button>
+    <button class="act" onclick="duplicateProfile()">Duplicate</button>
+    <button class="act" onclick="renameProfile()">Rename</button>
+    <button class="act" onclick="deleteProfile()">Delete</button>
+    <button class="act" onclick="exportProfile()">Export</button>
+    <button class="act" onclick="document.getElementById('importFile').click()">Import</button>
+    <input type="file" id="importFile" accept="application/json,.json"
+           style="display:none" onchange="onImportFile(event)">
+  </div>
+  <div class="profbar" id="filebar" style="display:none">
+    <button class="act" onclick="openCfg()">Open config…</button>
+    <button class="act" onclick="openProfiles()">Open profiles…</button>
+    <span id="files" class="status"></span>
+  </div>
+</div>
+
+<dialog id="metaDlg">
+  <form method="dialog">
+    <div class="body">
+      <h2 style="margin:0;font-size:14px">Telescope / profile</h2>
+      <label class="hint">These details are stored with the profile.</label>
+      <input id="m_name" placeholder="Telescope / setup name">
+      <input id="m_desc" placeholder="Description">
+      <input id="m_focal" type="number" placeholder="Focal length (mm)">
+      <input id="m_aperture" type="number" placeholder="Aperture (mm)">
+      <input id="m_camera" placeholder="Camera">
+      <textarea id="m_notes" placeholder="Notes"></textarea>
+    </div>
+    <footer>
+      <button class="act" value="cancel">Cancel</button>
+      <button class="act primary" id="m_ok" value="ok">Save profile</button>
+    </footer>
+  </form>
+</dialog>
+
+<script>
+/* SCHEMA_START */
+const EMBEDDED_SCHEMA = [
+  {
+    "section": "optics",
+    "fields": [
+      {
+        "name": "FOCAL_LENGTH",
+        "type": "int",
+        "default": 714,
+        "help": "Effective focal length at the sensor (mm)."
+      },
+      {
+        "name": "PIXEL_SIZE",
+        "type": "int",
+        "default": 2,
+        "help": "Camera pixel size (um)."
+      },
+      {
+        "name": "SIDEREAL",
+        "type": "float",
+        "default": 15.04,
+        "help": "Arcsec/s per sidereal multiplier unit (15.04)."
+      },
+      {
+        "name": "USE_EPHEMERIS",
+        "type": "bool",
+        "default": true,
+        "help": "Compute the solar diameter from the date."
+      },
+      {
+        "name": "EPHEMERIS_DIAMETER_OVERRIDE",
+        "type": "float",
+        "default": 0.0,
+        "help": "Force the solar diameter (arcsec); 0 = auto."
+      },
+      {
+        "name": "SOLAR_DIAMETER",
+        "type": "float",
+        "default": 1934.8248794201108,
+        "help": "Fallback solar diameter (arcsec) when no ephemeris."
+      }
+    ]
+  },
+  {
+    "section": "scan",
+    "fields": [
+      {
+        "name": "ENABLE_CAPTURE",
+        "type": "bool",
+        "default": true,
+        "help": "Write SER files (False = dry run)."
+      },
+      {
+        "name": "ENABLE_AUTO_EXP",
+        "type": "bool",
+        "default": true,
+        "help": "Run the auto-exposure loop."
+      },
+      {
+        "name": "NUM_CYCLES",
+        "type": "int",
+        "default": 1,
+        "help": "Cycles in the single-scan mode."
+      },
+      {
+        "name": "PADDED_DURATION",
+        "type": "int",
+        "default": 3,
+        "help": "Seconds of sky padding per side (if PADDED_ARCSEC=0)."
+      },
+      {
+        "name": "PADDED_ARCSEC",
+        "type": "float",
+        "default": 200.0,
+        "help": "Fixed arcsec padding per side (0 = use PADDED_DURATION)."
+      },
+      {
+        "name": "RETURN_MULTIPLIER",
+        "type": "float",
+        "default": 32.0,
+        "help": "Fast slew multiplier for repositioning."
+      }
+    ]
+  },
+  {
+    "section": "fps",
+    "fields": [
+      {
+        "name": "CAPTURE_FPS",
+        "type": "float",
+        "default": 0.0,
+        "help": "Force the capture FPS; 0 = measure."
+      },
+      {
+        "name": "FPS_SAMPLES",
+        "type": "int",
+        "default": 5,
+        "help": "Readings of CurrentFrameRate to median."
+      },
+      {
+        "name": "FPS_SAMPLE_INTERVAL",
+        "type": "float",
+        "default": 0.2,
+        "help": "Seconds between FPS readings."
+      },
+      {
+        "name": "FPS_PROBE_SECONDS",
+        "type": "float",
+        "default": 0.0,
+        "help": "Measure the real capture FPS for this many seconds; 0 = off."
+      },
+      {
+        "name": "CAPTURE_START_TIMEOUT",
+        "type": "float",
+        "default": 5.0,
+        "help": "Seconds to wait for the capture to start."
+      },
+      {
+        "name": "CAPTURE_START_SETTLE",
+        "type": "float",
+        "default": 0.1,
+        "help": "Seconds to settle after the first frame."
+      },
+      {
+        "name": "CAPTURE_STALL_SECONDS",
+        "type": "float",
+        "default": 3.0,
+        "help": "Abort if no frames are written for this long."
+      },
+      {
+        "name": "FRAMES_SHORT_TOL",
+        "type": "float",
+        "default": 0.1,
+        "help": "Warn if this fraction of frames is missing."
+      },
+      {
+        "name": "CAPTURE_MIN_FREE_GB",
+        "type": "float",
+        "default": 1.0,
+        "help": "Minimum free disk space to start a scan (GB)."
+      }
+    ]
+  },
+  {
+    "section": "limb",
+    "fields": [
+      {
+        "name": "LIMB_SEARCH_SPEED",
+        "type": "float",
+        "default": 4.0,
+        "help": "Multiplier for the limb search."
+      },
+      {
+        "name": "LIMB_SAMPLE_INTERVAL",
+        "type": "float",
+        "default": 0.05,
+        "help": "Seconds between limb samples."
+      },
+      {
+        "name": "LIMB_MAX_SEARCH",
+        "type": "int",
+        "default": 120,
+        "help": "Seconds before giving up the limb search."
+      },
+      {
+        "name": "LIMB_STDDEV_MIN",
+        "type": "int",
+        "default": 500,
+        "help": "Minimum stddev to call it on-disk."
+      },
+      {
+        "name": "ON_DISK_STDDEV",
+        "type": "int",
+        "default": 2000,
+        "help": "Stddev that clearly means on-disk."
+      },
+      {
+        "name": "LIMB_DARK_MULT",
+        "type": "float",
+        "default": 5.0,
+        "help": "Threshold = dark stddev x this."
+      }
+    ]
+  },
+  {
+    "section": "dec",
+    "fields": [
+      {
+        "name": "ENABLE_DEC_CENTERING",
+        "type": "bool",
+        "default": true,
+        "help": "Use the left/right Dec centring loop."
+      },
+      {
+        "name": "DEC_INTERVAL",
+        "type": "int",
+        "default": 2,
+        "help": "Re-centre every N cycles."
+      },
+      {
+        "name": "DEC_CENTER_TOLERANCE",
+        "type": "float",
+        "default": 0.03,
+        "help": "Centred when |L-R|/(L+R) is below this."
+      },
+      {
+        "name": "DEC_MAX_CORRECTIONS",
+        "type": "int",
+        "default": 8,
+        "help": "Max Dec nudges per centring."
+      },
+      {
+        "name": "DEC_NUDGE_SPEED",
+        "type": "float",
+        "default": 3.0,
+        "help": "Dec nudge multiplier."
+      },
+      {
+        "name": "DEC_SETTLE_TIME",
+        "type": "float",
+        "default": 0.3,
+        "help": "Seconds to settle after a nudge."
+      },
+      {
+        "name": "DEC_DRIFT_TOL_ARCSEC",
+        "type": "float",
+        "default": 10.0,
+        "help": "Re-centre Dec between scans if it drifts more."
+      }
+    ]
+  },
+  {
+    "section": "mosaic",
+    "fields": [
+      {
+        "name": "ENABLE_MOSAIC",
+        "type": "bool",
+        "default": false,
+        "help": "True = multi-row mosaic; False = single scan."
+      },
+      {
+        "name": "MOSAIC_SLIT_LENGTH_MM",
+        "type": "float",
+        "default": 7.0,
+        "help": "Physical slit length (mm)."
+      },
+      {
+        "name": "MOSAIC_SLIT_IMAGE_SCALE",
+        "type": "float",
+        "default": 1.0,
+        "help": "Slit re-imaging magnification (measured live if possible)."
+      },
+      {
+        "name": "MOSAIC_OVERLAP",
+        "type": "float",
+        "default": 0.15,
+        "help": "Fractional overlap between rows."
+      },
+      {
+        "name": "MOSAIC_MARGIN_ARCSEC",
+        "type": "float",
+        "default": 100.0,
+        "help": "Extra sky above/below the disk (arcsec)."
+      },
+      {
+        "name": "MOSAIC_SCANS_PER_ROW",
+        "type": "int",
+        "default": 5,
+        "help": "Scans per row."
+      },
+      {
+        "name": "MOSAIC_AUTO_CENTER_DEC",
+        "type": "bool",
+        "default": true,
+        "help": "Auto Dec centring by chords."
+      },
+      {
+        "name": "MOSAIC_CENTER_MAX_ITER",
+        "type": "int",
+        "default": 3,
+        "help": "Chord centring iterations."
+      },
+      {
+        "name": "MOSAIC_CENTER_RESIDUAL_ARCSEC",
+        "type": "float",
+        "default": 300.0,
+        "help": "Assumed residual after centring."
+      },
+      {
+        "name": "MOSAIC_DEC_SPEED",
+        "type": "float",
+        "default": 3.0,
+        "help": "Dec move multiplier between rows."
+      },
+      {
+        "name": "MOSAIC_DEC_BACKLASH",
+        "type": "float",
+        "default": 30.0,
+        "help": "Backlash taken up before each approach (arcsec)."
+      },
+      {
+        "name": "MOSAIC_DEC_SETTLE",
+        "type": "float",
+        "default": 0.5,
+        "help": "Seconds to settle after a Dec move."
+      },
+      {
+        "name": "MOSAIC_CHORD_SPEED",
+        "type": "float",
+        "default": 16.0,
+        "help": "Multiplier for chord/calibration traverses."
+      }
+    ]
+  },
+  {
+    "section": "exposure",
+    "fields": [
+      {
+        "name": "EXP_PERCENTILE",
+        "type": "float",
+        "default": 0.995,
+        "help": "Histogram percentile to target (0.995)."
+      },
+      {
+        "name": "EXP_TARGET_LEVEL",
+        "type": "float",
+        "default": 0.88,
+        "help": "Target level as a fraction of full scale."
+      },
+      {
+        "name": "EXP_TOLERANCE",
+        "type": "float",
+        "default": 0.04,
+        "help": "Convergence window as a fraction of full scale."
+      },
+      {
+        "name": "EXP_MAX_ATTEMPTS",
+        "type": "int",
+        "default": 6,
+        "help": "Max auto-exposure iterations."
+      }
+    ]
+  },
+  {
+    "section": "calibration",
+    "fields": [
+      {
+        "name": "CALIBRATE_SCAN_RATE",
+        "type": "bool",
+        "default": true,
+        "help": "Self-calibrate the scan rate at session start."
+      },
+      {
+        "name": "CALIBRATION_SAMPLES",
+        "type": "int",
+        "default": 1,
+        "help": "Calibration traverses to average."
+      },
+      {
+        "name": "CONSISTENCY_TOL_XY",
+        "type": "float",
+        "default": 0.03,
+        "help": "Warn if X/Y drifts more than this between scans."
+      },
+      {
+        "name": "CONSISTENCY_TOL_EXTENT",
+        "type": "float",
+        "default": 0.03,
+        "help": "Warn if the slit extent drifts more than this."
+      },
+      {
+        "name": "SCAN_RETRIES",
+        "type": "int",
+        "default": 1,
+        "help": "Retries per failed scan."
+      },
+      {
+        "name": "COS_DEC_CORRECTION",
+        "type": "bool",
+        "default": true,
+        "help": "Apply 1/cos(Dec) in both modes."
+      },
+      {
+        "name": "MEASURE_SLIT_EXTENT",
+        "type": "bool",
+        "default": true,
+        "help": "Measure the slit extent in a live frame."
+      },
+      {
+        "name": "SLIT_EXTENT_BANDS",
+        "type": "int",
+        "default": 48,
+        "help": "Bands for the slit extent profile."
+      }
+    ]
+  },
+  {
+    "section": "logging",
+    "fields": [
+      {
+        "name": "SCAN_LOG_PATH",
+        "type": "str",
+        "default": "",
+        "help": "CSV path; empty = capture folder."
+      },
+      {
+        "name": "SCAN_STATS_PATH",
+        "type": "str",
+        "default": "",
+        "help": "JSONL path; empty = capture folder."
+      },
+      {
+        "name": "SESSION_META_PATH",
+        "type": "str",
+        "default": "",
+        "help": "Session JSON path; empty = capture folder."
+      }
+    ]
+  }
+];
+/* SCHEMA_END */
+
+let schema = [];
+let mode = "file";            // "server" or "file"
+let profiles = {version: 2, active: "", profiles: {}};
+let cfgHandle = null, profilesHandle = null;
+let pendingProfile = null;    // {name, config} waiting for the meta dialog
+
+// ── tiny DOM helpers ─────────────────────────────────────────────────────────
+function el(tag, attrs, kids) {
+  const e = document.createElement(tag);
+  for (const k in (attrs||{})) e.setAttribute(k, attrs[k]);
+  (kids||[]).forEach(k => e.appendChild(k));
+  return e;
+}
+function txt(s){ return document.createTextNode(s); }
+function byId(id){ return document.getElementById(id); }
+function setStatus(msg, cls){
+  const s = byId("status"); s.textContent = msg || ""; s.className = "status" + (cls ? " " + cls : "");
+}
+function flash(msg){ setStatus(msg); setTimeout(() => setStatus(""), 1600); }
+function banner(msg){ const b = byId("banner"); if (msg){ b.textContent = msg; b.className = "banner on"; } else { b.className = "banner"; } }
+
+// ── data access: server or local ─────────────────────────────────────────────
+async function apiGet(path){
+  const r = await fetch(path, {cache:"no-store"});
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+async function apiSend(path, method, obj){
+  const r = await fetch(path, {method, headers:{"Content-Type":"application/json"},
+                               body: JSON.stringify(obj)});
+  return r.json();
+}
+
+// ── INI read/write (file mode) ───────────────────────────────────────────────
+function parseIni(text){
+  const out = {}; let section = "";
+  text.split(/\r?\n/).forEach(raw => {
+    const line = raw.split("#")[0].split(";")[0].trim();
+    if (!line) return;
+    if (line.startsWith("[") && line.endsWith("]")) { section = line.slice(1,-1).trim(); return; }
+    const i = line.indexOf("=");
+    if (i < 0) return;
+    const key = line.slice(0, i).trim().toLowerCase();
+    out[key] = line.slice(i+1).trim();
+  });
+  return out;
+}
+function buildIni(values){
+  const lines = ["# NightScribe configuration — written by the UI.", ""];
+  schema.forEach(sec => {
+    lines.push("[" + sec.section + "]");
+    sec.fields.forEach(f => {
+      lines.push("# " + f.help);
+      let v = values[f.name];
+      if (v === undefined) v = f.default;
+      if (typeof v === "boolean") v = v ? "true" : "false";
+      lines.push(f.name.toLowerCase() + " = " + v);
+    });
+    lines.push("");
+  });
+  return lines.join("\n");
+}
+function coerce(f, raw){
+  if (f.type === "bool") return String(raw).toLowerCase() === "true" || raw === true;
+  if (f.type === "int") return parseInt(raw, 10);
+  if (f.type === "float") return parseFloat(raw);
+  return raw;
+}
+
+// ── init ─────────────────────────────────────────────────────────────────────
+async function init(){
+  try {
+    const s = await apiGet("/api/schema");
+    schema = s;
+    mode = "server";
+    byId("conn").textContent = "server";
+    banner("");
+    try { profiles = await apiGet("/api/profiles"); } catch(e) { profiles = {version:2,active:"",profiles:{}}; }
+  } catch (e) {
+    mode = "file";
+    schema = EMBEDDED_SCHEMA;
+    byId("conn").textContent = "file mode";
+    byId("filebar").style.display = "flex";
+    banner("No server: editing files directly. Start/Stop need nightscribe-ui.py loaded in SharpCap (http://127.0.0.1:8765/).");
+    profiles = {version:2, active:"", profiles:{}};
+  }
+  normalizeProfiles();
+  render();
+  refreshStatus();
+}
+
+function normalizeProfiles(){
+  profiles.version = 2;
+  profiles.profiles = profiles.profiles || {};
+  Object.keys(profiles.profiles).forEach(name => {
+    const p = profiles.profiles[name];
+    if (p && !("config" in p)) {                 // migrate v1 flat profile
+      profiles.profiles[name] = {meta:{}, config:p};
+    } else if (p && !p.meta) {
+      p.meta = {};
+    }
+  });
+}
+
+// ── render ───────────────────────────────────────────────────────────────────
+function render(){
+  renderSession();
+  const tabs = byId("tabs"), main = byId("main");
+  tabs.innerHTML = ""; main.innerHTML = "";
+  schema.forEach((sec, i) => {
+    const b = el("button", {onclick:"show("+i+")"}, [txt(sec.section)]);
+    if (i === 0) b.className = "on";
+    tabs.appendChild(b);
+    const s = el("section", {id:"sec"+i});
+    if (i === 0) s.className = "on";
+    sec.fields.forEach(f => {
+      const id = "f_" + f.name;
+      const current = (f.value !== undefined) ? f.value : f.default;
+      let input;
+      if (f.type === "bool") {
+        input = el("input", {type:"checkbox", id:id, "data-name":f.name});
+        input.checked = !!current;
+        s.appendChild(el("div", {class:"field"}, [
+          el("div", {class:"bool"}, [input, el("label", {for:id}, [txt(f.name)])]),
+          el("div", {class:"hint"}, [txt(f.help)])]));
+      } else {
+        const type = (f.type === "int" || f.type === "float") ? "number" : "text";
+        input = el("input", {type:type, id:id, "data-name":f.name, value:current});
+        s.appendChild(el("div", {class:"field"}, [
+          el("label", {for:id}, [txt(f.name)]), input,
+          el("div", {class:"hint"}, [txt(f.help)])]));
+      }
+    });
+    main.appendChild(s);
+  });
+  renderProfiles();
+  syncSession();
+}
+function show(i){
+  document.querySelectorAll(".tabs button").forEach((b,j) => b.className = (j===i)?"on":"");
+  document.querySelectorAll("main section").forEach((s,j) => s.className = (j===i)?"on":"");
+}
+
+function renderSession(){
+  const box = byId("session");
+  box.innerHTML = "";
+  box.appendChild(el("h2", {}, [txt("Session")]));
+  addSessionSelect(box, "Mode", "ENABLE_MOSAIC",
+    [["false","Single scan"],["true","Mosaic"]]);
+  addSessionNumber(box, "Scans / row", "MOSAIC_SCANS_PER_ROW");
+  addSessionNumber(box, "Repetitions", "NUM_CYCLES");
+  addSessionNumber(box, "Padding (arcsec)", "PADDED_ARCSEC");
+}
+function addSessionSelect(box, label, name, options){
+  const f = findField(name); if (!f) return;
+  const sel = el("select", {"data-session":name});
+  options.forEach(([v, t]) => {
+    const o = el("option", {value:v}, [txt(t)]);
+    sel.appendChild(o);
+  });
+  sel.addEventListener("change", () => setField(name, sel.value === "true"));
+  box.appendChild(el("div", {class:"cell"}, [el("label",{},[txt(label)]), sel]));
+}
+function addSessionNumber(box, label, name){
+  const f = findField(name); if (!f) return;
+  const inp = el("input", {type:"number", "data-session":name});
+  inp.addEventListener("input", () => setField(name, Number(inp.value)));
+  box.appendChild(el("div", {class:"cell"}, [el("label",{},[txt(label)]), inp]));
+}
+function syncSession(){
+  document.querySelectorAll("[data-session]").forEach(c => {
+    const name = c.getAttribute("data-session");
+    const v = getField(name);
+    if (c.tagName === "SELECT") c.value = String(!!v);
+    else c.value = v;
+  });
+}
+function findField(name){
+  for (const sec of schema) for (const f of sec.fields) if (f.name===name) return f;
+  return null;
+}
+function getField(name){
+  const inp = document.querySelector('#main input[data-name="'+name+'"]');
+  if (!inp) return undefined;
+  if (inp.type === "checkbox") return inp.checked;
+  const f = findField(name);
+  return (f && (f.type==="int"||f.type==="float")) ? Number(inp.value) : inp.value;
+}
+function setField(name, value){
+  const inp = document.querySelector('#main input[data-name="'+name+'"]');
+  if (!inp) return;
+  if (inp.type === "checkbox") inp.checked = !!value; else inp.value = value;
+  syncSession();
+}
+
+function collect(){
+  const out = {};
+  document.querySelectorAll("#main input[data-name]").forEach(inp => {
+    const name = inp.getAttribute("data-name");
+    if (inp.type === "checkbox") out[name] = inp.checked;
+    else { const f = findField(name); out[name] = (f && (f.type==="int"||f.type==="float")) ? Number(inp.value) : inp.value; }
+  });
+  return out;
+}
+function setValues(vals){
+  document.querySelectorAll("#main input[data-name]").forEach(inp => {
+    const name = inp.getAttribute("data-name");
+    if (name in vals) { if (inp.type==="checkbox") inp.checked = !!vals[name]; else inp.value = vals[name]; }
+  });
+  syncSession();
+}
+function setDefaults(){
+  const d = {}; schema.forEach(sec => sec.fields.forEach(f => { d[f.name] = f.default; }));
+  setValues(d);
+}
+
+// ── config save ──────────────────────────────────────────────────────────────
+async function saveConfig(silent){
+  const values = collect();
+  if (mode === "server") {
+    await apiSend("/api/config", "PUT", values);
+  } else {
+    const text = buildIni(values);
+    if (cfgHandle) {
+      const w = await cfgHandle.createWritable(); await w.write(text); await w.close();
+    } else {
+      download("nightscribe-scan.cfg", text, "text/plain");
+    }
+  }
+  if (!silent) flash("config saved");
+}
+function download(name, text, type){
+  const blob = new Blob([text], {type:type || "application/json"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ── file mode open ───────────────────────────────────────────────────────────
+async function openCfg(){
+  if (window.showOpenFilePicker) {
+    const [h] = await window.showOpenFilePicker({types:[{description:"NightScribe config",
+      accept:{"text/plain":[".cfg",".ini"]}}]});
+    cfgHandle = h;
+    const text = await (await h.getFile()).text();
+    applyIni(text);
+    byId("files").textContent = "config: " + h.name;
+  } else {
+    const inp = el("input", {type:"file", accept:".cfg,.ini,.txt"});
+    inp.onchange = async () => { applyIni(await inp.files[0].text()); byId("files").textContent = "config: " + inp.files[0].name; };
+    inp.click();
+  }
+}
+function applyIni(text){
+  const ini = parseIni(text);
+  const vals = {};
+  schema.forEach(sec => sec.fields.forEach(f => {
+    const key = f.name.toLowerCase();
+    if (key in ini) vals[f.name] = coerce(f, ini[key]);
+  }));
+  setValues(vals);
+}
+async function openProfiles(){
+  if (window.showOpenFilePicker) {
+    const [h] = await window.showOpenFilePicker({types:[{description:"Profiles",
+      accept:{"application/json":[".json"]}}]});
+    profilesHandle = h;
+    profiles = JSON.parse(await (await h.getFile()).text());
+    normalizeProfiles(); renderProfiles();
+    byId("files").textContent = "profiles: " + h.name;
+  } else {
+    const inp = el("input", {type:"file", accept:".json"});
+    inp.onchange = async () => { profiles = JSON.parse(await inp.files[0].text()); normalizeProfiles(); renderProfiles(); };
+    inp.click();
+  }
+}
+
+// ── profiles ─────────────────────────────────────────────────────────────────
+function renderProfiles(){
+  const sel = byId("profiles"); sel.innerHTML = "";
+  sel.appendChild(el("option", {value:""}, [txt("(select profile)")]));
+  Object.keys(profiles.profiles||{}).sort().forEach(n => {
+    const p = profiles.profiles[n];
+    const label = n + (p.meta && p.meta.telescope ? " · " + p.meta.telescope : "");
+    const o = el("option", {value:n}, [txt(label)]);
+    if (n === profiles.active) o.selected = true;
+    sel.appendChild(o);
+  });
+  byId("activeBadge").textContent = profiles.active ? "active: " + profiles.active : "";
+}
+function onSelectProfile(){}
+function selected(){ return byId("profiles").value; }
+async function persistProfiles(){
+  if (mode === "server") { await apiSend("/api/profiles", "PUT", profiles); }
+  else if (profilesHandle) {
+    const w = await profilesHandle.createWritable(); await w.write(JSON.stringify(profiles, null, 2)); await w.close();
+  } else { download("nightscribe-profiles.json", JSON.stringify(profiles, null, 2)); }
+  renderProfiles();
+}
+async function applyProfile(){
+  const name = selected();
+  if (!name || !profiles.profiles[name]) { setStatus("no profile selected","warn"); return; }
+  const p = profiles.profiles[name];
+  setValues(p.config || {});
+  await saveConfig(true);
+  profiles.active = name; await persistProfiles();
+  const unknown = validateProfile(p.config || {});
+  if (unknown.length) setStatus("applied (unknown keys: " + unknown.join(", ") + ")","warn");
+  else flash("applied & saved: " + name);
+}
+function validateProfile(obj){
+  const known = new Set(); schema.forEach(sec => sec.fields.forEach(f => known.add(f.name)));
+  return Object.keys(obj).filter(k => !known.has(k));
+}
+
+async function newProfile(){
+  const name = prompt("New profile name:", "");
+  if (!name) return;
+  setDefaults();
+  askMeta(name, collect(), true);
+}
+async function duplicateProfile(){
+  const name = selected();
+  if (!name) { setStatus("no profile selected","warn"); return; }
+  const copy = prompt("Duplicate as:", name + "-copy");
+  if (!copy) return;
+  const src = profiles.profiles[name];
+  profiles.profiles[copy] = JSON.parse(JSON.stringify(src));
+  await persistProfiles();
+  flash("duplicated: " + copy);
+}
+async function renameProfile(){
+  const name = selected();
+  if (!name) { setStatus("no profile selected","warn"); return; }
+  const nn = prompt("Rename to:", name);
+  if (!nn || nn === name) return;
+  profiles.profiles[nn] = profiles.profiles[name];
+  delete profiles.profiles[name];
+  if (profiles.active === name) profiles.active = nn;
+  await persistProfiles(); flash("renamed to: " + nn);
+}
+async function deleteProfile(){
+  const name = selected();
+  if (!name) { setStatus("no profile selected","warn"); return; }
+  if (!confirm("Delete profile '" + name + "'?")) return;
+  delete profiles.profiles[name];
+  if (profiles.active === name) profiles.active = "";
+  await persistProfiles(); flash("deleted: " + name);
+}
+function exportProfile(){
+  const name = selected();
+  if (!name) { setStatus("no profile selected","warn"); return; }
+  download("nightscribe-" + name + ".json", JSON.stringify(profiles.profiles[name], null, 2));
+}
+function onImportFile(ev){
+  const file = ev.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const obj = JSON.parse(reader.result);
+      const name = prompt("Import as profile name:", file.name.replace(/\.json$/i,""));
+      if (!name) return;
+      const p = ("config" in obj) ? obj : {meta:{}, config:obj};
+      profiles.profiles[name] = p; await persistProfiles(); flash("imported: " + name);
+    } catch(e) { setStatus("import failed: " + e,"err"); }
+  };
+  reader.readAsText(file); ev.target.value = "";
+}
+
+// ── profile meta dialog ──────────────────────────────────────────────────────
+function askMeta(name, config, isNew){
+  const old = (profiles.profiles[name] && profiles.profiles[name].meta) || {};
+  const focal = config.FOCAL_LENGTH !== undefined ? config.FOCAL_LENGTH : (findField("FOCAL_LENGTH")||{}).default;
+  byId("m_name").value = old.telescope || "";
+  byId("m_desc").value = old.description || "";
+  byId("m_focal").value = old.focal_length_mm || focal || "";
+  byId("m_aperture").value = old.aperture_mm || "";
+  byId("m_camera").value = old.camera || "";
+  byId("m_notes").value = old.notes || "";
+  pendingProfile = {name, config, isNew};
+  byId("metaDlg").showModal();
+}
+byId("metaDlg").addEventListener("close", async () => {
+  if (byId("metaDlg").returnValue !== "ok" || !pendingProfile) return;
+  const meta = {
+    telescope: byId("m_name").value.trim(),
+    description: byId("m_desc").value.trim(),
+    focal_length_mm: Number(byId("m_focal").value) || null,
+    aperture_mm: Number(byId("m_aperture").value) || null,
+    camera: byId("m_camera").value.trim(),
+    notes: byId("m_notes").value.trim(),
+    created: new Date().toISOString()
+  };
+  const {name, config, isNew} = pendingProfile;
+  const cfg = Object.assign({}, config);
+  if (meta.focal_length_mm && "FOCAL_LENGTH" in cfg) cfg.FOCAL_LENGTH = meta.focal_length_mm;
+  profiles.profiles[name] = {meta, config: cfg};
+  profiles.active = name;
+  if (isNew) setValues(cfg);
+  await persistProfiles();
+  await saveConfig(true);
+  flash("profile saved: " + name);
+  pendingProfile = null;
+});
+
+// ── run ──────────────────────────────────────────────────────────────────────
+async function start(){ if (mode!=="server"){ setStatus("Start needs the server","warn"); return; } await apiSend("/api/start","POST",{}); refreshStatus(); }
+async function stop(){ if (mode!=="server"){ setStatus("Stop needs the server","warn"); return; } await apiSend("/api/stop","POST",{}); refreshStatus(); }
+
+async function refreshStatus(){
+  const startBtn = byId("btnStart"), stopBtn = byId("btnStop");
+  if (mode !== "server") { startBtn.disabled = true; stopBtn.disabled = true; return; }
+  try {
+    const s = await apiGet("/api/status");
+    byId("dot").className = "dot" + (s.running ? " run" : "");
+    startBtn.disabled = s.running; stopBtn.disabled = !s.running;
+  } catch(e) {}
+}
+function restoreDefaults(){
+  if (!confirm("Fill the form with the built-in defaults?")) return;
+  setDefaults(); flash("defaults loaded (not saved)");
+}
+function reload(){ init(); }
+
+init();
+setInterval(refreshStatus, 1500);
+</script>
+</body>
+</html>
