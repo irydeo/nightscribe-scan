@@ -702,18 +702,20 @@ def refresh_derived():
     return PIXEL_SCALE
 
 
-def apply_scan_calibration(factor):
+def apply_scan_calibration(factor, per_unit=None):
     """Scale the scan multiplier by ``factor`` and recompute derived values.
 
     Used by calibrate_scan_rate(): the factor is the ratio between the sky rate
     we want (PIXEL_SCALE * fps) and the rate the mount actually produced. Keeps
     one single rate for the whole session, so the X scale is identical in every
-    scan.
+    scan. ``per_unit`` is the mount's measured sky rate per multiplier unit;
+    when given, scan_speed uses it instead of the nominal SIDEREAL, so the
+    derived timings and the logged actual_xy match the real mount.
     """
     global scan_multiplier, scan_speed, crossing_time, padded_seconds
     global scan_duration
     scan_multiplier *= factor
-    scan_speed = scan_multiplier * SIDEREAL
+    scan_speed = scan_multiplier * (per_unit if per_unit else SIDEREAL)
     crossing_time = SOLAR_DIAMETER / scan_speed
     if PADDED_ARCSEC > 0:
         padded_seconds = PADDED_ARCSEC / scan_speed
@@ -1797,6 +1799,7 @@ def calibrate_scan_rate():
 
     rates.sort()
     rate = rates[len(rates) // 2]
+    per_unit = rate / MOSAIC_CHORD_SPEED
     target = PIXEL_SCALE * fps
     factor = scan_rate_calibration_factor(rate, MOSAIC_CHORD_SPEED, target,
                                           scan_multiplier)
@@ -1807,18 +1810,18 @@ def calibrate_scan_rate():
     # Sanity guard: a bad measurement must not be allowed to wreck the scan.
     # With the corrected formula the factor is a small correction (~1); the old
     # buggy formula (target/rate) produced ~0.24 here and is rejected.
-    corrected = scan_multiplier * factor * SIDEREAL
+    corrected = scan_multiplier * factor * per_unit
     if not (0.5 * target <= corrected <= 2.0 * target):
         print("  Calibration: correction out of range ({:.2f}\"/s vs target "
               "{:.2f}\"/s); keeping {:.2f}x".format(
                   corrected, target, scan_multiplier))
         return None
-    apply_scan_calibration(factor)
+    apply_scan_calibration(factor, per_unit)
     _calibration[0] = {"applied": True, "factor": factor,
                        "measured_rate": rate, "target_rate": target,
-                       "measured_per_unit": rate / MOSAIC_CHORD_SPEED}
+                       "measured_per_unit": per_unit}
     print("  measured {:.2f}\"/s at {:.1f}x -> {:.2f}\"/s per unit".format(
-          rate, MOSAIC_CHORD_SPEED, rate / MOSAIC_CHORD_SPEED))
+          rate, MOSAIC_CHORD_SPEED, per_unit))
     print("  target {:.2f}\"/s -> factor {:.4f}".format(target, factor))
     print("  new scan: {:.2f}x ({:.1f}\"/s), duration {:.1f}s".format(
           scan_multiplier, scan_speed, scan_duration))

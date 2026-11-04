@@ -139,6 +139,8 @@ def test_calibrate_scan_rate_targets_the_rate():
     factor = ns["calibrate_scan_rate"]()
     assert factor is not None
     assert ns["_calibration"][0]["applied"] is True
-    # The corrected multiplier must make the sky move at the target rate.
+    # The corrected multiplier must make the sky move at the target rate, and
+    # scan_speed (used for the durations) must be that real rate, not nominal.
     sky_rate = ns["scan_multiplier"] * per_unit
     assert sky_rate == pytest.approx(target, rel=0.03)
+    assert ns["scan_speed"] == pytest.approx(target, rel=0.03)
