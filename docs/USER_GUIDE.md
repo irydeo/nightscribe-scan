@@ -66,10 +66,8 @@ focal_length = 714
 pixel_size = 2
 
 # Only for a full-disk mosaic:
-[scan]
-enable_mosaic = false
-
 [mosaic]
+enable_mosaic = false
 mosaic_slit_length_mm = 7
 mosaic_scans_per_row = 5
 ```
@@ -82,10 +80,11 @@ You can also point at a path with the `NIGHTSCRIBE_CONFIG` environment variable.
 
 **Control panel (HTML).** It works in **two modes**:
 
-- **With the server** (recommended for capturing): load `nightscribe-ui.py` in
-  the SharpCap scripting console and Run. It starts a local server on
-  `http://127.0.0.1:8765/`; open it in the browser. Here **Start/Stop** are
-  enabled.
+- **With the server** (recommended for capturing): run `nightscribe-scan.py`
+  with `START_UI = True` (the default) in the SharpCap scripting console. It
+  starts a local server on `http://127.0.0.1:8765/`; open it in the browser.
+  Here **Start/Stop** are enabled. With `START_UI = False` the script runs a
+  capture immediately and no panel is started.
 - **As a file**: open `nightscribe-ui.html` directly in Chrome/Edge (embedded
   schema). You can view and edit all the configuration and profiles, opening
   and saving `nightscribe-scan.cfg` and `nightscribe-profiles.json` with the
@@ -527,7 +526,7 @@ causes and actions.
 - `nightscribe-scan.py` — capture script (config block, `scan_once()`,
   `calibrate_scan_rate()`, `measure_slit_scale()`).
 - `nightscribe-scan.cfg` (ready) / `docs/nightscribe-scan.cfg.example` / `docs/nightscribe-scan.cfg.reference` — configuration.
-- `nightscribe-ui.py` / `nightscribe-ui.html` — control panel (profiles, config, start/stop).
+- `nightscribe-ui.html` — control panel served by the script (profiles, config, start/stop).
 - `tools/build_ui.py` — regenerates the panel's embedded schema.
 - `nightscribe-profiles.json` — profiles saved by the panel.
 - `tools/align_stack_recon.py`, `tools/mosaic_from_recon.py` — stacking and mosaic.

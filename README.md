@@ -31,8 +31,8 @@ here.
 - **Cross-scan consistency checks** on the rate and the slit extent.
 - **Writes a scan log and session metadata** after every scan
   (`scan_log.csv`, `scan_stats.jsonl`, `session_meta.json`).
-- **Optional HTML control panel** for profiles, configuration and
-  start/stop (`nightscribe-ui.py` + `nightscribe-ui.html`).
+- **Built-in HTML control panel** for profiles, configuration and
+  start/stop (`nightscribe-ui.html`, served by the script).
 - **Two post-processing tools**: `tools/align_stack_recon.py` (stack one row)
   and `tools/mosaic_from_recon.py` (stitch the rows).
 
@@ -51,9 +51,9 @@ here.
    keys if you capture a full-disk mosaic); every other setting has a default.
    The complete list is in `docs/nightscribe-scan.cfg.reference`.
 2. Connect the camera and mount in SharpCap, start Live View and set the ROI.
-3. Load `nightscribe-scan.py` in the SharpCap scripting console and run it.
-   (Or run `nightscribe-ui.py` and open the control panel at
-   <http://127.0.0.1:8765/>.)
+3. Load `nightscribe-scan.py` in the SharpCap scripting console and run it. It
+   opens the control panel at <http://127.0.0.1:8765/> by default; use it to
+   Start/Stop. Set `START_UI = False` to run a capture directly instead.
 4. Read the startup banner: check the expected disk diameter, the scan-rate
    calibration and (in mosaic mode) the row plan.
 5. When the session finishes, the SER files plus `scan_log.csv`,

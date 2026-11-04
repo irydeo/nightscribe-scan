@@ -3,7 +3,7 @@
 """Regenerate the schema block embedded in nightscribe-ui.html.
 
 The control panel works in two modes:
-  - served by nightscribe-ui.py (schema comes from the live server);
+  - served by nightscribe-scan.py (schema comes from the live server);
   - opened directly as a file, where it needs the schema embedded.
 
 This script reads CONFIG_SCHEMA (and the built-in defaults) from

@@ -31,9 +31,10 @@
 # User guide: docs/USER_GUIDE.md (English) / docs/GUIA_USUARIO.md (Spanish).
 #
 # Configuration lives in nightscribe-scan.cfg (INI, next to this file): edit it
-# by hand or with the HTML control panel. The panel is nightscribe-ui.py +
-# nightscribe-ui.html (load nightscribe-ui.py in SharpCap); it also starts and
-# stops the capture. Nothing in this script needs editing to change a setting.
+# by hand or with the built-in HTML control panel. This single script is the
+# only entry point: with START_UI = True (default) it serves the panel
+# (nightscribe-ui.html) and starts/stops the capture; with START_UI = False it
+# runs a capture immediately. Nothing else needs editing to change a setting.
 #
 # The event-driven measurement approach (FrameCaptured handler, GetStats().Item2
 # for the limb signal, Frame.CutROI for sub-regions) is the core idea borrowed
@@ -43,6 +44,8 @@
 import time
 import math
 import os
+import json
+import socket
 import clr
 # SharpCap runs IronPython, which can import .NET types via `clr`. We need
 # System.Drawing.Rectangle because that's the type SharpCap's Frame.CutROI
@@ -57,6 +60,12 @@ from System.Drawing import Rectangle
 # ENABLE_MOSAIC / MOSAIC_SLIT_LENGTH_MM / MOSAIC_SCANS_PER_ROW (mosaic).
 # Rationale, geometry and recommended values: the user guide (Deep dive).
 # ══════════════════════════════════════════════════════════════════════════════
+
+# ── 0. Run mode ───────────────────────────────────────────────────────────────
+# True  = start the built-in HTML control panel (open http://127.0.0.1:8765/
+#         to Start/Stop the capture). This is the default single entry point.
+# False = run the capture immediately, without the panel.
+START_UI = True
 
 # ── 1. Optics and mount ───────────────────────────────────────────────────────
 # Together these define the image scale: arcsec/pixel = 206265 * (PIXEL_SIZE/1000) / FOCAL_LENGTH.
@@ -2980,9 +2989,248 @@ def run_capture():
     print("=" * 60)
 
 
-# Entry point. nightscribe-ui.py sets NIGHTSCRIBE_UI and provides
-# _run_ui_server(), which then drives run_capture() on demand.
-if globals().get("NIGHTSCRIBE_UI", False):
-    _run_ui_server()
+# ── HTML control panel (served by this script) ────────────────────────────────
+# One script, one entry point: with START_UI = True it serves a compact panel
+# on http://127.0.0.1:8765/ to manage config/profiles and start/stop the
+# capture; with START_UI = False it runs the capture directly. Nothing is
+# installed: it uses a plain Python socket and serves nightscribe-ui.html.
+clr.AddReference("System")
+from System.Threading import Thread, ThreadStart
+
+HOST = "127.0.0.1"
+PORT = 8765
+
+
+def _folder():
+    """Folder that holds the script, its config, the HTML and the profiles."""
+    candidates = []
+    try:
+        candidates.append(os.environ.get("NIGHTSCRIBE_HOME"))
+    except:
+        pass
+    try:
+        candidates.append(os.path.dirname(os.path.abspath(__file__)))
+    except:
+        pass
+    try:
+        candidates.append(os.getcwd())
+    except:
+        pass
+    for c in candidates:
+        if c and os.path.isdir(c):
+            return c
+    return "."
+
+
+FOLDER = _folder()
+CFG = os.path.join(FOLDER, "nightscribe-scan.cfg")
+PROFILES = os.path.join(FOLDER, "nightscribe-profiles.json")
+HTML = os.path.join(FOLDER, "nightscribe-ui.html")
+
+state = {"running": False, "message": "idle", "started": ""}
+
+
+def _read(path, default=""):
+    try:
+        with open(path, "r") as fh:
+            return fh.read()
+    except:
+        return default
+
+
+def _write(path, text):
+    with open(path, "w") as fh:
+        fh.write(text)
+
+
+def _schema():
+    """The CONFIG_SCHEMA fields with their current values and defaults."""
+    filevals = {}
+    try:
+        for (_sec, key), raw in _parse_ini(_read(CFG, "")).items():
+            filevals[key.upper()] = raw
+    except:
+        pass
+    out = []
+    for section, entries in CONFIG_SCHEMA:
+        fields = []
+        for name, help_text in entries:
+            val = globals().get(name)
+            raw = filevals.get(name.upper())
+            if raw is not None:
+                try:
+                    if isinstance(val, bool):
+                        val = raw.strip().lower() in ("1", "true", "yes", "on")
+                    elif isinstance(val, int) and not isinstance(val, bool):
+                        val = int(float(raw))
+                    elif isinstance(val, float):
+                        val = float(raw)
+                    else:
+                        val = raw
+                except:
+                    pass
+            if isinstance(val, bool):
+                kind = "bool"
+            elif isinstance(val, int):
+                kind = "int"
+            elif isinstance(val, float):
+                kind = "float"
+            else:
+                kind = "str"
+            fields.append({"name": name, "value": val, "help": help_text,
+                           "type": kind,
+                           "default": CONFIG_DEFAULTS.get(name, val)})
+        out.append({"section": section, "fields": fields})
+    return out
+
+
+def _write_cfg(values):
+    """Write nightscribe-scan.cfg with the schema's comments."""
+    lines = ["# NightScribe configuration — written by the UI.", ""]
+    for section, entries in CONFIG_SCHEMA:
+        lines.append("[{}]".format(section))
+        for name, help_text in entries:
+            lines.append("# {}".format(help_text))
+            val = values.get(name, globals().get(name))
+            if isinstance(val, bool):
+                val = "true" if val else "false"
+            lines.append("{} = {}".format(name.lower(), val))
+        lines.append("")
+    _write(CFG, "\n".join(lines))
+
+
+def _load_profiles():
+    try:
+        return json.loads(_read(PROFILES, '{"version": 1, "profiles": {}}'))
+    except:
+        return {"version": 1, "profiles": {}}
+
+
+def _run_capture_thread():
+    """Run a capture session on the server thread (used by Start)."""
+    try:
+        state["running"] = True
+        state["message"] = "running"
+        state["started"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        _abort[0] = False
+        apply_config_file(verbose=False)
+        refresh_derived()
+        run_capture()
+        state["message"] = "done"
+    except Exception as e:
+        state["message"] = "error: {}".format(e)
+    finally:
+        state["running"] = False
+
+
+def _start():
+    if state["running"]:
+        return
+    t = Thread(ThreadStart(lambda: _run_capture_thread()))
+    t.IsBackground = True
+    t.Start()
+
+
+def _read_request(conn):
+    data = b""
+    while b"\r\n\r\n" not in data:
+        chunk = conn.recv(4096)
+        if not chunk:
+            break
+        data += chunk
+    head, _, body = data.partition(b"\r\n\r\n")
+    lines = head.decode("utf-8", "replace").split("\r\n")
+    if not lines or not lines[0]:
+        return None
+    parts = lines[0].split(" ")
+    method = parts[0] if parts else "GET"
+    path = parts[1] if len(parts) > 1 else "/"
+    length = 0
+    for line in lines[1:]:
+        if line.lower().startswith("content-length:"):
+            try:
+                length = int(line.split(":", 1)[1].strip())
+            except:
+                length = 0
+    while len(body) < length:
+        chunk = conn.recv(4096)
+        if not chunk:
+            break
+        body += chunk
+    return method, path, body[:length]
+
+
+def _respond(conn, code, body, ctype="application/json"):
+    if not isinstance(body, bytes):
+        body = body.encode("utf-8")
+    reason = {200: "OK", 404: "Not Found", 500: "Internal Server Error"}.get(
+        code, "OK")
+    header = ("HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n"
+              "Connection: close\r\n\r\n").format(code, reason, ctype, len(body))
+    conn.sendall(header.encode("utf-8") + body)
+
+
+def _handle(conn):
+    req = _read_request(conn)
+    if req is None:
+        _respond(conn, 404, json.dumps({"error": "bad request"}))
+        return
+    method, path, body = req
+    if path in ("/", "/index.html"):
+        _respond(conn, 200,
+                 _read(HTML, "<h1>nightscribe-ui.html not found</h1>"),
+                 "text/html; charset=utf-8")
+    elif path == "/api/schema" or (path == "/api/config" and method == "GET"):
+        _respond(conn, 200, json.dumps(_schema()))
+    elif path == "/api/config" and method in ("PUT", "POST"):
+        try:
+            values = json.loads(body.decode("utf-8") or "{}")
+        except:
+            values = {}
+        _write_cfg(values)
+        _respond(conn, 200, json.dumps({"ok": True}))
+    elif path == "/api/profiles" and method == "GET":
+        _respond(conn, 200, json.dumps(_load_profiles()))
+    elif path == "/api/profiles" and method in ("PUT", "POST"):
+        _write(PROFILES, body.decode("utf-8") or "{}")
+        _respond(conn, 200, json.dumps({"ok": True}))
+    elif path == "/api/start" and method == "POST":
+        _start()
+        _respond(conn, 200, json.dumps({"ok": True, "running": state["running"]}))
+    elif path == "/api/stop" and method == "POST":
+        _abort[0] = True
+        _respond(conn, 200, json.dumps({"ok": True}))
+    elif path == "/api/status":
+        _respond(conn, 200, json.dumps(state))
+    else:
+        _respond(conn, 404, json.dumps({"error": "not found"}))
+
+
+def run_ui_server():
+    """Serve the control panel until the console is closed."""
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind((HOST, PORT))
+    srv.listen(5)
+    print("NightScribe control panel ready: http://{}:{}/".format(HOST, PORT))
+    while True:
+        conn, _addr = srv.accept()
+        try:
+            _handle(conn)
+        except Exception as e:
+            print("UI error: {}".format(e))
+        finally:
+            try:
+                conn.close()
+            except:
+                pass
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+# One script, one entry point. START_UI = True (default) serves the HTML
+# control panel and drives the capture on demand; START_UI = False runs a
+# capture immediately.
+if START_UI:
+    run_ui_server()
 else:
     run_capture()
