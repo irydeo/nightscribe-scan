@@ -93,8 +93,9 @@ También puedes fijar la ruta con la variable de entorno `NIGHTSCRIBE_CONFIG`.
 
 El panel es una tarjeta compacta (no ocupa toda la pantalla) con:
 
-- **Sesión** (arriba): modo (un barrido/mosaico), tomas por fila, repeticiones y
-  padding, a la vista.
+- **Sesión** (arriba): modo (un barrido/mosaico), tomas por fila, ciclos y
+  padding, a la vista. El control que no aplica al modo elegido queda
+  deshabilitado (tomas por fila en un barrido, ciclos en un mosaico).
 - **Perfiles**: crea (pidiendo **datos del telescopio**: nombre, descripción,
   focal, apertura, cámara y notas), aplica (**Apply & save** escribe el `.cfg`
   en un paso), duplica, renombra, borra, importa y exporta. El perfil activo se

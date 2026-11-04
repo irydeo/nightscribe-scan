@@ -61,6 +61,8 @@
   .session .cell { display:grid; gap:2px; }
   .session label { font-size:11px; color:var(--mut); }
   .session input, .session select { width:100%; }
+  .session .cell.off { opacity:.4; }
+  .session input:disabled, .session select:disabled { cursor:not-allowed; }
   dialog { background:var(--card); color:var(--fg); border:1px solid var(--line);
            border-radius:12px; padding:0; width:min(480px,92vw); }
   dialog::backdrop { background:#0008; }
@@ -695,6 +697,7 @@ function render(){
     main.appendChild(s);
   });
   renderProfiles();
+  main.onchange = syncSession;   // keep the session card in sync with the tabs
   syncSession();
 }
 function show(i){
@@ -708,8 +711,8 @@ function renderSession(){
   box.appendChild(el("h2", {}, [txt("Session")]));
   addSessionSelect(box, "Mode", "ENABLE_MOSAIC",
     [["false","Single scan"],["true","Mosaic"]]);
-  addSessionNumber(box, "Scans / row", "MOSAIC_SCANS_PER_ROW");
-  addSessionNumber(box, "Repetitions", "NUM_CYCLES");
+  addSessionNumber(box, "Scans per row (mosaic)", "MOSAIC_SCANS_PER_ROW");
+  addSessionNumber(box, "Cycles (single scan)", "NUM_CYCLES");
   addSessionNumber(box, "Padding (arcsec)", "PADDED_ARCSEC");
 }
 function addSessionSelect(box, label, name, options){
@@ -734,6 +737,21 @@ function syncSession(){
     const v = getField(name);
     if (c.tagName === "SELECT") c.value = String(!!v);
     else c.value = v;
+  });
+  updateSessionState();
+}
+function updateSessionState(){
+  // Grey out the control that does not apply to the current mode:
+  // MOSAIC_SCANS_PER_ROW only matters for a mosaic, NUM_CYCLES only for a
+  // single scan.
+  const mosaic = !!getField("ENABLE_MOSAIC");
+  const active = {MOSAIC_SCANS_PER_ROW: mosaic, NUM_CYCLES: !mosaic};
+  Object.keys(active).forEach(name => {
+    const inp = document.querySelector('#session [data-session="'+name+'"]');
+    if (!inp) return;
+    inp.disabled = !active[name];
+    const cell = inp.closest(".cell");
+    if (cell) cell.className = active[name] ? "cell" : "cell off";
   });
 }
 function findField(name){

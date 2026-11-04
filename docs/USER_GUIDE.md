@@ -92,8 +92,9 @@ You can also point at a path with the `NIGHTSCRIBE_CONFIG` environment variable.
 
 The panel is a compact card (not full screen) with:
 
-- **Session** (top): mode (single/mosaic), scans per row, repetitions and
-  padding, in plain sight.
+- **Session** (top): mode (single/mosaic), scans per row, cycles and padding,
+  in plain sight. The control that does not apply to the selected mode is
+  greyed out (scans per row for a single scan, cycles for a mosaic).
 - **Profiles**: create (asking for the **telescope data**: name, description,
   focal length, aperture, camera and notes), apply (**Apply & save** writes the
   `.cfg` in one step), duplicate, rename, delete, import and export. The active
